@@ -1,0 +1,466 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8" />
+    <title>Intro Replacer</title>
+</head>
+<body>
+<div id="IntroReplacerPage" data-role="page" class="page type-interior pluginPage"
+     data-require="emby-input,emby-button,emby-select,emby-checkbox">
+    <div data-role="content">
+        <div class="content-primary">
+            <h2>Intro Replacer</h2>
+            <p class="fieldDescription">
+                Rules are evaluated top to bottom; the first enabled matching rule wins.
+                An empty condition matches everything. The custom intro plays first, then the
+                episode/movie starts. With <em>Replace</em> the item's own intro is skipped;
+                with <em>Prepend</em> the item plays from the beginning.
+            </p>
+
+            <h3>Settings</h3>
+            <label class="checkboxContainer">
+                <input id="moviesOnly" type="checkbox" is="emby-checkbox" />
+                <span>Only play intros for movies</span>
+            </label>
+            <div class="inputContainer">
+                <label class="inputLabel inputLabelUnfocused" for="sessionIdleMinutes">Session idle timeout (minutes)</label>
+                <input id="sessionIdleMinutes" is="emby-input" type="number" min="1" />
+                <div class="fieldDescription">
+                    Used by "once per session": if no intro played for this long, the next one starts a new session.
+                </div>
+            </div>
+
+            <h3>Intro files</h3>
+            <p class="fieldDescription">
+                Uploaded videos are stored in the plugin data folder and can be picked in rules below.
+            </p>
+            <div class="inputContainer">
+                <input id="uploadFile" type="file" accept="video/*" />
+                <button id="uploadBtn" is="emby-button" type="button" class="raised emby-button">
+                    <span>Upload intro</span>
+                </button>
+            </div>
+            <div id="assetList"></div>
+
+            <h3>Rules</h3>
+            <div id="ruleList"></div>
+            <button id="addRuleBtn" is="emby-button" type="button" class="raised emby-button">
+                <span>Add rule</span>
+            </button>
+
+            <div style="margin-top:2em">
+                <button id="saveBtn" is="emby-button" type="button" class="raised button-submit emby-button">
+                    <span>Save</span>
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <script type="text/javascript">
+        (() => {
+            const pluginId = '07e08043-224d-4228-964f-02242635344f';
+            let config = null;
+            let libraries = [];
+            let users = [];
+            let targets = [];
+            let assetExists = {};
+
+            const api = (path) => ApiClient.getUrl('IntroReplacer' + path);
+            const token = () => ApiClient.accessToken ? ApiClient.accessToken() : '';
+
+            const newRule = () => ({
+                Id: '00000000-0000-0000-0000-000000000000',
+                Name: 'New rule',
+                Enabled: true,
+                LibraryIds: [],
+                UserIds: [],
+                TargetItemIds: [],
+                ExcludedItemIds: [],
+                IncludeTags: [],
+                ExcludeTags: [],
+                Genres: [],
+                Studios: [],
+                DateRange: null,
+                ReleaseDateRange: null,
+                AssetIds: [],
+                PlaybackMode: 'RandomOne',
+                Placement: 'Replace',
+                Frequency: 'EveryTime'
+            });
+
+            const csv = (arr) => (arr || []).join(', ');
+            const parseCsv = (value) => value.split(',').map(s => s.trim()).filter(s => s.length > 0);
+
+            const load = async () => {
+                Dashboard.showLoadingMsg();
+                const [cfg, libs, usrs, tree, assets] = await Promise.all([
+                    ApiClient.getPluginConfiguration(pluginId),
+                    ApiClient.getJSON(api('/Libraries')),
+                    ApiClient.getJSON(api('/Users')),
+                    ApiClient.getJSON(api('/Targets')),
+                    ApiClient.getJSON(api('/Assets'))
+                ]);
+                config = cfg;
+                config.Rules = config.Rules || [];
+                config.Assets = config.Assets || [];
+                libraries = libs || [];
+                users = usrs || [];
+                targets = tree || [];
+                assetExists = {};
+                (assets || []).forEach(a => { assetExists[a.Id] = a.Exists; });
+
+                document.querySelector('#moviesOnly').checked = !!config.MoviesOnly;
+                document.querySelector('#sessionIdleMinutes').value = config.SessionIdleMinutes || 180;
+                renderAssets();
+                renderRules();
+                Dashboard.hideLoadingMsg();
+            };
+
+            // ---------- assets ----------
+            const renderAssets = () => {
+                const host = document.querySelector('#assetList');
+                host.innerHTML = '';
+                if (config.Assets.length === 0) {
+                    host.innerHTML = '<p class="fieldDescription">No intro files uploaded yet.</p>';
+                    return;
+                }
+                config.Assets.forEach(asset => {
+                    const row = document.createElement('div');
+                    row.className = 'listItem';
+                    const label = document.createElement('label');
+                    label.className = 'checkboxContainer';
+                    const cb = document.createElement('input');
+                    cb.type = 'checkbox';
+                    cb.checked = asset.Enabled;
+                    cb.addEventListener('change', () => { asset.Enabled = cb.checked; });
+                    label.appendChild(cb);
+                    const name = document.createElement('span');
+                    name.textContent = asset.Name + (assetExists[asset.Id] ? '' : ' (file missing)');
+                    label.appendChild(name);
+                    row.appendChild(label);
+                    const del = document.createElement('button');
+                    del.setAttribute('is', 'emby-button');
+                    del.className = 'emby-button';
+                    del.textContent = 'Delete';
+                    del.addEventListener('click', () => deleteAsset(asset.Id));
+                    row.appendChild(del);
+                    host.appendChild(row);
+                });
+            };
+
+            const deleteAsset = (id) => {
+                fetch(api('/Assets/' + id), {
+                    method: 'DELETE',
+                    headers: { 'X-Emby-Token': token() }
+                }).then(load);
+            };
+
+            // ---------- rules ----------
+            const renderRules = () => {
+                const host = document.querySelector('#ruleList');
+                host.innerHTML = '';
+                config.Rules.forEach((rule, index) => host.appendChild(renderRule(rule, index)));
+            };
+
+            const field = (labelText, input) => {
+                const wrap = document.createElement('div');
+                wrap.className = 'inputContainer';
+                const label = document.createElement('label');
+                label.className = 'inputLabel inputLabelUnfocused';
+                label.textContent = labelText;
+                wrap.appendChild(label);
+                wrap.appendChild(input);
+                return wrap;
+            };
+
+            const textInput = (value, onChange) => {
+                const el = document.createElement('input');
+                el.setAttribute('is', 'emby-input');
+                el.type = 'text';
+                el.value = value || '';
+                el.addEventListener('input', () => onChange(el.value));
+                return el;
+            };
+
+            const checkbox = (labelText, checked, onChange) => {
+                const label = document.createElement('label');
+                label.className = 'checkboxContainer';
+                const cb = document.createElement('input');
+                cb.type = 'checkbox';
+                cb.checked = checked;
+                cb.addEventListener('change', () => onChange(cb.checked));
+                label.appendChild(cb);
+                const span = document.createElement('span');
+                span.textContent = labelText;
+                label.appendChild(span);
+                return label;
+            };
+
+            const radioGroup = (name, options, value, onChange) => {
+                const wrap = document.createElement('div');
+                options.forEach(opt => {
+                    const label = document.createElement('label');
+                    label.className = 'checkboxContainer';
+                    const input = document.createElement('input');
+                    input.type = 'radio';
+                    input.name = name;
+                    input.value = opt.value;
+                    input.checked = value === opt.value;
+                    input.addEventListener('change', () => onChange(opt.value));
+                    label.appendChild(input);
+                    const span = document.createElement('span');
+                    span.textContent = opt.label;
+                    label.appendChild(span);
+                    wrap.appendChild(label);
+                });
+                return wrap;
+            };
+
+            const renderRule = (rule, index) => {
+                rule.TargetItemIds = rule.TargetItemIds || [];
+                rule.ExcludedItemIds = rule.ExcludedItemIds || [];
+                rule.UserIds = rule.UserIds || [];
+                rule.LibraryIds = rule.LibraryIds || [];
+                rule.AssetIds = rule.AssetIds || [];
+
+                const card = document.createElement('div');
+                card.className = 'inputContainer';
+                card.style.border = '1px solid rgba(255,255,255,0.15)';
+                card.style.padding = '1em';
+                card.style.margin = '1em 0';
+
+                const header = document.createElement('div');
+                header.innerHTML = '<strong>Rule ' + (index + 1) + '</strong>';
+                card.appendChild(header);
+
+                card.appendChild(field('Name', textInput(rule.Name, v => rule.Name = v)));
+                card.appendChild(checkbox('Enabled', rule.Enabled, v => rule.Enabled = v));
+
+                // libraries
+                const libWrap = document.createElement('div');
+                libraries.forEach(lib => {
+                    libWrap.appendChild(checkbox(lib.Name, rule.LibraryIds.includes(lib.Id), on => {
+                        rule.LibraryIds = on
+                            ? [...new Set([...rule.LibraryIds, lib.Id])]
+                            : rule.LibraryIds.filter(id => id !== lib.Id);
+                    }));
+                });
+                if (libraries.length === 0) libWrap.innerHTML = '<p class="fieldDescription">No libraries found.</p>';
+                card.appendChild(field('Libraries (empty = all)', libWrap));
+
+                // users
+                const userWrap = document.createElement('div');
+                users.forEach(u => {
+                    userWrap.appendChild(checkbox(u.Name, rule.UserIds.includes(u.Id), on => {
+                        rule.UserIds = on
+                            ? [...new Set([...rule.UserIds, u.Id])]
+                            : rule.UserIds.filter(id => id !== u.Id);
+                    }));
+                });
+                if (users.length === 0) userWrap.innerHTML = '<p class="fieldDescription">No users found.</p>';
+                card.appendChild(field('Active for users (empty = all)', userWrap));
+
+                // target tree
+                const treeHost = document.createElement('div');
+                treeHost.style.maxHeight = '22em';
+                treeHost.style.overflow = 'auto';
+                treeHost.style.border = '1px solid rgba(255,255,255,0.1)';
+                treeHost.style.padding = '0.5em';
+                const treeHeading = document.createElement('div');
+                treeHeading.className = 'fieldDescription';
+                treeHeading.textContent = 'Series/movies targeted (empty = all). Activating a series activates all its seasons and episodes.';
+                const treeBody = document.createElement('div');
+                treeHost.appendChild(treeHeading);
+                treeHost.appendChild(treeBody);
+
+                const refreshTree = () => {
+                    treeBody.innerHTML = '';
+                    targets.forEach(node => treeBody.appendChild(renderTargetNode(rule, node, refreshTree)));
+                };
+                refreshTree();
+                card.appendChild(field('Targets', treeHost));
+
+                card.appendChild(field('Include tags (comma separated)', textInput(csv(rule.IncludeTags), v => rule.IncludeTags = parseCsv(v))));
+                card.appendChild(field('Exclude tags (comma separated)', textInput(csv(rule.ExcludeTags), v => rule.ExcludeTags = parseCsv(v))));
+                card.appendChild(field('Genres (comma separated)', textInput(csv(rule.Genres), v => rule.Genres = parseCsv(v))));
+                card.appendChild(field('Studios (comma separated)', textInput(csv(rule.Studios), v => rule.Studios = parseCsv(v))));
+
+                // intros
+                const assetWrap = document.createElement('div');
+                config.Assets.forEach(asset => {
+                    assetWrap.appendChild(checkbox(asset.Name, rule.AssetIds.includes(asset.Id), on => {
+                        rule.AssetIds = on
+                            ? [...new Set([...rule.AssetIds, asset.Id])]
+                            : rule.AssetIds.filter(id => id !== asset.Id);
+                    }));
+                });
+                if (config.Assets.length === 0) assetWrap.innerHTML = '<p class="fieldDescription">Upload an intro file first.</p>';
+                card.appendChild(field('Intros (pick one or more)', assetWrap));
+
+                const mode = document.createElement('select');
+                mode.setAttribute('is', 'emby-select');
+                ['RandomOne', 'SequentialAll'].forEach(m => {
+                    const opt = document.createElement('option');
+                    opt.value = m;
+                    opt.textContent = m === 'RandomOne' ? 'Play one random intro' : 'Play all selected intros in order';
+                    if (rule.PlaybackMode === m) opt.selected = true;
+                    mode.appendChild(opt);
+                });
+                mode.addEventListener('change', () => rule.PlaybackMode = mode.value);
+                card.appendChild(field('Playback', mode));
+
+                const placementField = field('What to do with the item\'s own intro',
+                    radioGroup('placement-' + index,
+                        [{ value: 'Replace', label: 'Replace it (skip the original intro)' },
+                         { value: 'Prepend', label: 'Prepend (play item from the beginning)' }],
+                        rule.Placement,
+                        v => rule.Placement = v));
+                const placementHint = document.createElement('div');
+                placementHint.className = 'fieldDescription';
+                placementHint.textContent = 'Replace keeps the detected intro markers so the client skips the original. Prepend removes those markers.';
+                placementField.appendChild(placementHint);
+                card.appendChild(placementField);
+
+                card.appendChild(field('Frequency',
+                    radioGroup('frequency-' + index,
+                        [{ value: 'EveryTime', label: 'Every new episode/movie' },
+                         { value: 'OncePerSession', label: 'Only the first time in a session' }],
+                        rule.Frequency,
+                        v => rule.Frequency = v)));
+
+                const remove = document.createElement('button');
+                remove.setAttribute('is', 'emby-button');
+                remove.className = 'emby-button';
+                remove.textContent = 'Remove rule';
+                remove.addEventListener('click', () => { config.Rules.splice(index, 1); renderRules(); });
+                card.appendChild(remove);
+
+                const up = document.createElement('button');
+                up.setAttribute('is', 'emby-button');
+                up.className = 'emby-button';
+                up.textContent = 'Move up';
+                up.disabled = index === 0;
+                up.addEventListener('click', () => {
+                    const [r] = config.Rules.splice(index, 1);
+                    config.Rules.splice(index - 1, 0, r);
+                    renderRules();
+                });
+                card.appendChild(up);
+
+                return card;
+            };
+
+            const renderTargetNode = (rule, node, refresh) => {
+                const wrap = document.createElement('div');
+                wrap.style.paddingLeft = '1em';
+
+                if (node.Type === 'Movie') {
+                    wrap.appendChild(checkbox(node.Name, rule.TargetItemIds.includes(node.Id), on => {
+                        rule.TargetItemIds = on
+                            ? [...new Set([...rule.TargetItemIds, node.Id])]
+                            : rule.TargetItemIds.filter(id => id !== node.Id);
+                    }));
+                    return wrap;
+                }
+
+                // Series
+                const seriesActive = rule.TargetItemIds.includes(node.Id);
+                wrap.appendChild(checkbox(node.Name, seriesActive, on => {
+                    if (on) {
+                        rule.TargetItemIds = [...new Set([...rule.TargetItemIds, node.Id])];
+                        clearExclusions(rule, node);
+                    } else {
+                        rule.TargetItemIds = rule.TargetItemIds.filter(id => id !== node.Id);
+                        clearExclusions(rule, node);
+                    }
+                    refresh();
+                }));
+
+                if (!seriesActive) {
+                    return wrap;
+                }
+
+                (node.Children || []).forEach(season => {
+                    const seasonWrap = document.createElement('div');
+                    seasonWrap.style.paddingLeft = '1.5em';
+
+                    const seasonActive = !rule.ExcludedItemIds.includes(season.Id);
+                    seasonWrap.appendChild(checkbox(season.Name, seasonActive, on => {
+                        if (on) {
+                            rule.ExcludedItemIds = rule.ExcludedItemIds.filter(id => id !== season.Id);
+                        } else {
+                            // Deactivating a season hides its episodes; reset their state.
+                            (season.Children || []).forEach(ep => {
+                                rule.ExcludedItemIds = rule.ExcludedItemIds.filter(id => id !== ep.Id);
+                            });
+                            rule.ExcludedItemIds = [...new Set([...rule.ExcludedItemIds, season.Id])];
+                        }
+                        refresh();
+                    }));
+
+                    if (seasonActive) {
+                        (season.Children || []).forEach(ep => {
+                            const epWrap = document.createElement('div');
+                            epWrap.style.paddingLeft = '1.5em';
+                            epWrap.appendChild(checkbox(ep.Name, !rule.ExcludedItemIds.includes(ep.Id), on => {
+                                if (on) {
+                                    rule.ExcludedItemIds = rule.ExcludedItemIds.filter(id => id !== ep.Id);
+                                } else {
+                                    rule.ExcludedItemIds = [...new Set([...rule.ExcludedItemIds, ep.Id])];
+                                }
+                            }));
+                            seasonWrap.appendChild(epWrap);
+                        });
+                    }
+
+                    wrap.appendChild(seasonWrap);
+                });
+
+                return wrap;
+            };
+
+            const clearExclusions = (rule, seriesNode) => {
+                const ids = new Set();
+                (seriesNode.Children || []).forEach(season => {
+                    ids.add(season.Id);
+                    (season.Children || []).forEach(ep => ids.add(ep.Id));
+                });
+                rule.ExcludedItemIds = rule.ExcludedItemIds.filter(id => !ids.has(id));
+            };
+
+            // ---------- actions ----------
+            const upload = () => {
+                const input = document.querySelector('#uploadFile');
+                if (!input.files || input.files.length === 0) return;
+                const fd = new FormData();
+                fd.append('file', input.files[0]);
+                fetch(api('/Assets'), {
+                    method: 'POST',
+                    headers: { 'X-Emby-Token': token() },
+                    body: fd
+                }).then(() => { input.value = ''; load(); });
+            };
+
+            const save = () => {
+                config.MoviesOnly = document.querySelector('#moviesOnly').checked;
+                config.SessionIdleMinutes = parseInt(document.querySelector('#sessionIdleMinutes').value, 10) || 180;
+                Dashboard.showLoadingMsg();
+                ApiClient.updatePluginConfiguration(pluginId, config).then(() => {
+                    Dashboard.hideLoadingMsg();
+                    Dashboard.processPluginConfigurationUpdateResult();
+                });
+            };
+
+            document.querySelector('#addRuleBtn').addEventListener('click', () => {
+                config.Rules.push(newRule());
+                renderRules();
+            });
+            document.querySelector('#uploadBtn').addEventListener('click', upload);
+            document.querySelector('#saveBtn').addEventListener('click', save);
+
+            load();
+        })();
+    </script>
+</div>
+</body>
+</html>

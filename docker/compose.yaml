@@ -1,0 +1,16 @@
+name: introreplacer
+
+services:
+  jellyfin:
+    image: jellyfin/jellyfin:10.10.7
+    container_name: introreplacer-jellyfin
+    restart: unless-stopped
+    ports:
+      - "8096:8096"
+      - "8920:8920"
+    environment:
+      - JELLYFIN_PublishedServerUrl=http://localhost:8096
+    volumes:
+      - ./jellyfin/config:/config
+      - ./jellyfin/cache:/cache
+      - ./media:/media

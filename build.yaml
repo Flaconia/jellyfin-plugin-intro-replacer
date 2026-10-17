@@ -1,0 +1,20 @@
+---
+name: "Intro Replacer"
+guid: "07e08043-224d-4228-964f-02242635344f"
+version: "1.0.0.0"
+targetAbi: "10.10.0.0"
+framework: "net8.0"
+owner: "flaconia"
+overview: "Play a custom intro before episodes and movies, replacing the original."
+description: >
+  Intro Replacer plays a per-item custom intro (a local video you provide) before
+  an episode or movie, using Jellyfin's server-side intro mechanism so it works on
+  any client that supports intros. Rules (matched in order) decide which intro to
+  play based on library, tags, genres, studios, dates, users, or specific
+  series/season/episode. The item's own detected intro is skipped so the custom
+  intro effectively replaces it.
+category: "MoviesAndShows"
+artifacts:
+  - "Jellyfin.Plugin.IntroReplacer.dll"
+changelog: >
+  Initial release.

@@ -1,0 +1,21 @@
+[
+    {
+        "guid": "07e08043-224d-4228-964f-02242635344f",
+        "name": "Intro Replacer",
+        "description": "Play a custom intro before episodes and movies, replacing the original.",
+        "overview": "Custom per-item intro replacer",
+        "owner": "flaconia",
+        "category": "MoviesAndShows",
+        "imageUrl": "",
+        "versions": [
+            {
+                "version": "1.0.0.0",
+                "changelog": "Initial release.",
+                "targetAbi": "10.10.0.0",
+                "sourceUrl": "",
+                "checksum": "",
+                "timestamp": "2026-01-01T00:00:00Z"
+            }
+        ]
+    }
+]

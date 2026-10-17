@@ -1,0 +1,11 @@
+bin/
+obj/
+.vs/
+.idea/
+artifacts/
+*.user
+
+# Local Docker test environment state (generated at runtime)
+docker/jellyfin/config/
+docker/jellyfin/cache/
+docker/media/
