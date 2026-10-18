@@ -10,7 +10,7 @@ namespace Jellyfin.Plugin.IntroReplacer.Services;
 /// </summary>
 /// <param name="AssetIds">The ordered intro asset ids to play.</param>
 /// <param name="Placement">Whether the item's own intro is replaced or the custom intro is prepended.</param>
-/// <param name="Frequency">Whether the intro plays every time or once per session.</param>
+/// <param name="Frequency">How often the intro repeats (every time, after a wait, or once per session).</param>
 /// <param name="RuleName">The name of the matched rule (for logging).</param>
 public sealed record IntroSelection(
     IReadOnlyList<Guid> AssetIds,

@@ -150,9 +150,11 @@ public class IntroReplacerController : ControllerBase
     [ProducesResponseType(StatusCodes.Status200OK)]
     public ActionResult<IEnumerable<LibraryDto>> GetLibraries()
     {
+        var introLibraryId = Plugin.IntroLibrary.GetLibraryItemId();
+
         var libraries = _libraryManager.GetVirtualFolders()
             .Select(v => (Folder: v, Id: Guid.TryParse(v.ItemId, out var id) ? id : Guid.Empty))
-            .Where(x => x.Id != Guid.Empty)
+            .Where(x => x.Id != Guid.Empty && x.Id != introLibraryId)
             .Select(x => new LibraryDto(x.Id, x.Folder.Name));
 
         return Ok(libraries);
@@ -190,9 +192,19 @@ public class IntroReplacerController : ControllerBase
             IsVirtualItem = false
         }).Items;
 
+        // Never offer the plugin's own hidden intro library (its intro clips show up
+        // as movies) as something to target.
+        var introLibraryId = Plugin.IntroLibrary.GetLibraryItemId();
+
         var result = new List<TargetNodeDto>();
         foreach (var item in topLevel.OrderBy(i => i.SortName, StringComparer.OrdinalIgnoreCase))
         {
+            if (introLibraryId is not null &&
+                _libraryManager.GetCollectionFolders(item).Any(f => f.Id == introLibraryId))
+            {
+                continue;
+            }
+
             if (item is Series series)
             {
                 var seasons = new List<TargetNodeDto>();

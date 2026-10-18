@@ -13,8 +13,9 @@ Local Intros plugin).
   tags, genres, studios, current/release date windows, or a series/season/episode
   target tree.
 - Per rule you choose **Replace** (skip the item's own intro) or **Prepend** (play
-  the item from the beginning), and whether the intro plays **every time** or
-  **once per session**.
+  the item from the beginning), and **how often the intro plays**: every time you start
+  a title, only after a wait time you set, or once per session (again after you close
+  the app or sign out).
 - Uploaded intro files are stored in the plugin data folder and registered through a
   **hidden internal library** (`Intro Replacer`), hidden from every user's home. This
   is required: Jellyfin silently drops intro files that are not scanned library
@@ -36,6 +37,12 @@ that. Assignment happens on the plugin's dashboard page (`Dashboard → Plugins 
 > Client note: movies get intros on every client. Episode intros are handled by the
 > web client (browser and Jellyfin Media Player). Some native TV/mobile apps ignore
 > episode intros; movies still work there.
+>
+> Client note: the intro is played **before the first title you start**. Jellyfin's web
+> client only requests it when playback begins at the start of a list, so it appears
+> when you press Play on a series/movie or on the first episode, not when you jump to a
+> later episode or resume one, and not on automatic "next episode" transitions. This is
+> a client limitation; the server is never asked in those cases.
 
 ## Install (release)
 

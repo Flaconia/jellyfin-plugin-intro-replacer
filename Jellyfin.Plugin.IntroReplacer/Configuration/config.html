@@ -23,10 +23,10 @@
                 <span>Only play intros for movies</span>
             </label>
             <div class="inputContainer">
-                <label class="inputLabel inputLabelUnfocused" for="sessionIdleMinutes">Session idle timeout (minutes)</label>
-                <input id="sessionIdleMinutes" is="emby-input" type="number" min="1" />
+                <label class="inputLabel inputLabelUnfocused" for="repeatAfterMinutes">Time to wait before the intro plays again (minutes)</label>
+                <input id="repeatAfterMinutes" is="emby-input" type="number" min="1" />
                 <div class="fieldDescription">
-                    Used by "once per session": if no intro played for this long, the next one starts a new session.
+                    Used by the "Only after the wait time" frequency below.
                 </div>
             </div>
 
@@ -110,7 +110,7 @@
                 (assets || []).forEach(a => { assetExists[a.Id] = a.Exists; });
 
                 document.querySelector('#moviesOnly').checked = !!config.MoviesOnly;
-                document.querySelector('#sessionIdleMinutes').value = config.SessionIdleMinutes || 180;
+                document.querySelector('#repeatAfterMinutes').value = config.RepeatAfterMinutes || 180;
                 renderAssets();
                 renderRules();
                 Dashboard.hideLoadingMsg();
@@ -321,12 +321,18 @@
                 placementField.appendChild(placementHint);
                 card.appendChild(placementField);
 
-                card.appendChild(field('Frequency',
+                const frequencyField = field('Frequency',
                     radioGroup('frequency-' + index,
-                        [{ value: 'EveryTime', label: 'Every new episode/movie' },
-                         { value: 'OncePerSession', label: 'Only the first time in a session' }],
+                        [{ value: 'EveryTime', label: 'Every time you start an episode or movie' },
+                         { value: 'OncePerInterval', label: 'Only after the wait time has passed' },
+                         { value: 'OncePerSession', label: 'Once per session' }],
                         rule.Frequency,
-                        v => rule.Frequency = v)));
+                        v => rule.Frequency = v));
+                const frequencyHint = document.createElement('div');
+                frequencyHint.className = 'fieldDescription';
+                frequencyHint.textContent = 'Every time plays before the title you start; if you start a list, it plays before the first title only. "Only after the wait time" replays it once the minutes set at the top have passed. "Once per session" replays it after you close the app or sign out.';
+                frequencyField.appendChild(frequencyHint);
+                card.appendChild(frequencyField);
 
                 const remove = document.createElement('button');
                 remove.setAttribute('is', 'emby-button');
@@ -443,7 +449,7 @@
 
             const save = () => {
                 config.MoviesOnly = document.querySelector('#moviesOnly').checked;
-                config.SessionIdleMinutes = parseInt(document.querySelector('#sessionIdleMinutes').value, 10) || 180;
+                config.RepeatAfterMinutes = parseInt(document.querySelector('#repeatAfterMinutes').value, 10) || 180;
                 Dashboard.showLoadingMsg();
                 ApiClient.updatePluginConfiguration(pluginId, config).then(() => {
                     Dashboard.hideLoadingMsg();

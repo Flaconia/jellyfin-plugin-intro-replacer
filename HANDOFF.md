@@ -1,6 +1,6 @@
 # HANDOFF — Intro Replacer (Jellyfin plugin)
 
-Last updated: 2026-10-18 (session 2). Read this first; then `AGENTS.md` for the hard
+Last updated: 2026-10-18 (session 4). Read this first; then `AGENTS.md` for the hard
 constraints, then `README.md` for the user-facing summary.
 
 ## 1. What we are building
@@ -121,6 +121,35 @@ Native TV/mobile apps are the caveat: per the third-party "Projectionist" plugin
 some ignore (or fail on) episode intros. **Movies work everywhere.** We do not inject
 JS, by the user's explicit choice, so episode support is limited to web-based clients.
 
+### 2d. When the client actually asks for intros (why "it only plays sometimes")
+
+`getIntros(firstItem, apiClient, options)` in `playbackmanager.js` bails out (returns
+`Items: []` **without calling the server at all**) when:
+
+```js
+options.startPositionTicks || options.startIndex || options.fullscreen === false ||
+!enableIntros(firstItem) || !userSettings.enableCinemaMode()
+```
+
+That has two consequences users notice:
+
+- **Queues / auto-advance.** `playWithIntros` fetches intros **once, for the first
+  item** of the play queue. `nextTrack` → `playInternal` never re-requests intros. So a
+  custom intro plays before the first item you start, not before every item in a binge.
+  (A's own `Intro` segment *is* re-read on each `playbackstart`, so skipping A's intro
+  still works per item.)
+- **Starting a specific episode.** Pressing play on an episode calls
+  `getEpisodePlaybackPromise` → `getEpisodes()` → `filterEpisodes()`, which expands the
+  queue to the whole series and sets `options.startIndex` to that episode's index. Any
+  truthy `startIndex` suppresses intros. So intros play when you start at index 0 (the
+  first episode, or the series' first-unwatched episode) and not when you start from a
+  later episode. A resume position (`startPositionTicks`) suppresses them the same way.
+
+This is client behaviour; the server is never asked, so **the plugin cannot fix it**
+without JS injection. The only universal workaround is HLS-level pre-roll (splice the
+intro into the item's own stream, as "Projectionist" does), which forces a
+transcode/remux of playback. Documented rather than worked around.
+
 ## 3. Bugs found and fixed in session 2
 
 1. **Config page wiped every asset's `FileName`.**
@@ -150,6 +179,38 @@ JS, by the user's explicit choice, so episode support is limited to web-based cl
 - A temporary admin API key was inserted to bootstrap and then **deleted**; no keys
   remain (`SELECT count(*) FROM ApiKeys` → 0).
 
+## 3c. Session 4 notes
+
+Three user-reported problems.
+
+1. **Frequency wording + a third option.** `IntroFrequency` now has three values, and
+   the rule card labels/hints were rewritten to match what the client actually does
+   (no "fetch", no "session" for the wait-time mode):
+   - `EveryTime` — "Every time you start an episode or movie" (plays before the first
+     item of a queue only; see §2d).
+   - `OncePerInterval` — "Only after the wait time has passed", using the renamed global
+     setting `RepeatAfterMinutes` (was `SessionIdleMinutes`; the XML name changed, so an
+     old value falls back to the 180 default).
+   - `OncePerSession` — "Once per session", i.e. plays again after the client
+     disconnects. `IntroSessionTracker` keys on the Jellyfin session id resolved from
+     the current request, and `Plugin.cs` forwards `ISessionManager.SessionEnded` to
+     `NotifySessionEnded(...)`. Verified: closing the client's WebSocket removes the
+     session (`WebSocketController.OnConnectionClosed` → `CloseIfNeededAsync` →
+     `SessionEnded`), which is exactly the "until disconnect" signal.
+   Verified live: same device → 1 then 0 intros; a second device → 1 (separate session);
+   `OncePerInterval` → 1 then 0 within the wait; `EveryTime` → 1 then 1.
+
+2. **Episode play did not show the intro.** Not a bug in the plugin — see §2d.
+
+3. **The intro file appeared in the targets list.** `/IntroReplacer/Targets` listed every
+   `Series`/`Movie`, including the hidden `Intro Replacer` library's intro clip (item
+   name `85a31089f6f24389b17d990044c7e5c8`, the intro mp4). `/IntroReplacer/Libraries`
+   also offered the hidden library as a rule condition. Fix: `IntroLibraryManager
+   .GetLibraryItemId()` and filter it out of both endpoints (targets are filtered via
+   `ILibraryManager.GetCollectionFolders(item)`).
+
+Tests are now 32 (`IntroSessionTrackerTests` adds 9).
+
 ## 4. Automatic intro detection — status
 
 - **Chapters: implemented** (`IntroChapterDetector`) and unit-tested. It is read-only
@@ -168,14 +229,15 @@ JS, by the user's explicit choice, so episode support is limited to web-based cl
 `Configuration/PluginConfiguration.cs` (XML-serialised — keep it to simple settable
 types):
 
-- `PluginConfiguration`: `Assets`, `Rules`, `MoviesOnly`, `SessionIdleMinutes` (180).
+- `PluginConfiguration`: `Assets`, `Rules`, `MoviesOnly`, `RepeatAfterMinutes` (180).
 - `IntroAsset`: `Id`, `Name`, `FileName` (the stored file under the intros folder),
   `Enabled`.
 - `IntroRule`: `Id`, `Name`, `Enabled`, `LibraryIds`, `UserIds`, `TargetItemIds`
   (active series/movie ids; empty = all), `ExcludedItemIds` (deactivated season/episode
   ids), `IncludeTags`, `ExcludeTags`, `Genres`, `Studios`, `DateRange`,
   `ReleaseDateRange`, `AssetIds`, `PlaybackMode` (`RandomOne`/`SequentialAll`),
-  `Placement` (`Replace`/`Prepend`), `Frequency` (`EveryTime`/`OncePerSession`).
+  `Placement` (`Replace`/`Prepend`), `Frequency`
+  (`EveryTime`/`OncePerInterval`/`OncePerSession`).
 - There is intentionally **no** chance/probability field. (Historically a rule could
   have a 0–100 roll that decided whether a matched rule fired, falling through on
   failure; the user removed it — ordering + conditions decide now.)
@@ -208,11 +270,13 @@ Config is saved through Jellyfin's standard `get/updatePluginConfiguration`.
 - `Services/IntroChapterDetector.cs` — chapter → intro range (unit-tested).
 - `Services/IntroSegmentProvider.cs` — `IMediaSegmentProvider` (chapters → Intro).
 - `Services/IntroSegmentHelper.cs` — apply `Replace`/`Prepend`.
-- `Services/IntroSessionTracker.cs` — per-user "once per session" heuristic.
+- `Services/IntroSessionTracker.cs` — pure, unit-tested; wait-time + once-per-session
+  bookkeeping (`Plugin.cs` wires `ISessionManager.SessionEnded` into it).
 - `Api/IntroReplacerController.cs` — REST endpoints.
 - `Configuration/config.html` — dashboard page (inline JS, no external controller).
-- `Jellyfin.Plugin.IntroReplacer.Tests/` — `RuleEngineTests` (14),
-  `IntroChapterDetectorTests` (8) → 23 passing.
+- `Jellyfin.Plugin.IntroReplacer.Tests/` — `RuleEngineTests` (15),
+  `IntroChapterDetectorTests` (8), `IntroSessionTrackerTests` (8 methods / 9 cases)
+  → 32 passing.
 
 ## 7. Commands
 
@@ -273,14 +337,27 @@ Restart the container after every deploy or the plugin won't reload.
 - Do **not** bundle Jellyfin/framework DLLs: `CopyLocalLockFileAssemblies=false`
   keeps the publish output to just our DLL.
 - Rules are ANDed; an empty condition list matches everything.
-- Session semantics are a heuristic (`SessionIdleMinutes`); intro providers get no
-  real client session id.
+- `IntroSessionTracker` is deliberately free of Jellyfin types (like `RuleEngine` and
+  `IntroChapterDetector`) so it stays unit-testable; the `ISessionManager.SessionEnded`
+  subscription lives in `Plugin.cs`. Don't inject `ISessionManager` into the tracker
+  itself — the test project does not load `MediaBrowser.Controller` at runtime.
+- "Session" for the `OncePerSession` frequency means the Jellyfin session
+  (`SessionEnded` on client disconnect), resolved from the request's
+  `Jellyfin-DeviceId` claim. The claim constant lives in `Jellyfin.Api.Constants
+  .InternalClaimTypes`, which plugins cannot reference, so the literal is used.
 
 ## 10. Next steps / open items
 
 1. **Confirm in the browser** (session 3 decision): play a Pokémon episode; B should
    play, then A should start at 0 with a "Skip Intro" button. To make it hands-free,
    each client sets `Playback → Media Segment Actions → Intro Segments → Skip`.
+   Remember §2d: the pre-roll only appears when playback starts at index 0 of a list
+   (first episode / "Play" on the series), not when starting from a later episode or a
+   resume position, and not on queue auto-advance.
+2. **Optional, if the user wants a universal pre-roll:** HLS-level splicing
+   (Projectionist-style) intercepts `/Videos/{id}/*.m3u8` and prepends the intro's
+   segments. That fixes queues and mid-list episode starts on every client, at the cost
+   of forcing a transcode/remux. Needs an explicit go-ahead before starting.
 2. Optional: implement audio-based intro detection (or document the Intro Skipper
    dependency more prominently in the UI).
 3. Optional: make `GET /Targets` lazy (it currently builds the whole

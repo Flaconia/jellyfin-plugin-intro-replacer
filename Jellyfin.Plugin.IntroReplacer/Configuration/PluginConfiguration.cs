@@ -26,10 +26,10 @@ public class PluginConfiguration : BasePluginConfiguration
     public bool MoviesOnly { get; set; }
 
     /// <summary>
-    /// Gets or sets how long (in minutes) without an intro before a new watching
-    /// session is assumed for the "once per session" frequency.
+    /// Gets or sets how long (in minutes) the intro waits before it may play again.
+    /// Used by <see cref="IntroFrequency.OncePerInterval"/>.
     /// </summary>
-    public int SessionIdleMinutes { get; set; } = 180;
+    public int RepeatAfterMinutes { get; set; } = 180;
 }
 
 /// <summary>
@@ -141,10 +141,22 @@ public enum IntroPlacement
 /// <summary>How often the custom intro plays.</summary>
 public enum IntroFrequency
 {
-    /// <summary>Play the intro for every new episode/movie.</summary>
+    /// <summary>
+    /// Play before every title the user starts. When several titles are started
+    /// together (a queue), Jellyfin plays the intro before the first one only.
+    /// </summary>
     EveryTime,
 
-    /// <summary>Play the intro only once per watching session.</summary>
+    /// <summary>
+    /// Play again only once the configured wait time has passed
+    /// (<see cref="PluginConfiguration.RepeatAfterMinutes"/>).
+    /// </summary>
+    OncePerInterval,
+
+    /// <summary>
+    /// Play once per client session; it plays again after the client disconnects
+    /// (closes the app, or signs out) and connects again.
+    /// </summary>
     OncePerSession
 }
 

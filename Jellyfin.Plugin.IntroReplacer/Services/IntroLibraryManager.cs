@@ -73,6 +73,25 @@ public sealed class IntroLibraryManager
     }
 
     /// <summary>
+    /// Gets the hidden library's own item id, when it exists. Used to keep the
+    /// library and its intro files out of the configuration page's lists.
+    /// </summary>
+    /// <returns>The library item id, or <c>null</c>.</returns>
+    public Guid? GetLibraryItemId()
+    {
+        try
+        {
+            var folder = FindVirtualFolder();
+            return folder is not null && Guid.TryParse(folder.ItemId, out var id) ? id : null;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogDebug(ex, "Intro Replacer: could not read the hidden intro library id");
+            return null;
+        }
+    }
+
+    /// <summary>
     /// Creates the hidden library when missing and re-applies the user hiding.
     /// </summary>
     /// <returns>A task.</returns>

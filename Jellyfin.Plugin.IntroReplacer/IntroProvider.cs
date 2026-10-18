@@ -10,6 +10,8 @@ using MediaBrowser.Controller;
 using MediaBrowser.Controller.Entities;
 using MediaBrowser.Controller.Library;
 using MediaBrowser.Controller.Persistence;
+using MediaBrowser.Controller.Session;
+using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.Logging;
 
 namespace Jellyfin.Plugin.IntroReplacer;
@@ -25,6 +27,8 @@ public class IntroProvider : IIntroProvider
     private readonly IMediaSegmentManager _segmentManager;
     private readonly ILibraryManager _libraryManager;
     private readonly IItemRepository _itemRepository;
+    private readonly IHttpContextAccessor _httpContextAccessor;
+    private readonly ISessionManager _sessionManager;
     private readonly Random _random = new();
 
     /// <summary>
@@ -34,16 +38,22 @@ public class IntroProvider : IIntroProvider
     /// <param name="mediaSegmentManager">Media segment manager.</param>
     /// <param name="libraryManager">Library manager.</param>
     /// <param name="itemRepository">Item repository (chapter access).</param>
+    /// <param name="httpContextAccessor">Accessor for the current request.</param>
+    /// <param name="sessionManager">Session manager, used by the session frequency.</param>
     public IntroProvider(
         ILoggerFactory loggerFactory,
         IMediaSegmentManager mediaSegmentManager,
         ILibraryManager libraryManager,
-        IItemRepository itemRepository)
+        IItemRepository itemRepository,
+        IHttpContextAccessor httpContextAccessor,
+        ISessionManager sessionManager)
     {
         _logger = loggerFactory.CreateLogger<IntroProvider>();
         _segmentManager = mediaSegmentManager;
         _libraryManager = libraryManager;
         _itemRepository = itemRepository;
+        _httpContextAccessor = httpContextAccessor;
+        _sessionManager = sessionManager;
     }
 
     /// <inheritdoc />
@@ -115,16 +125,9 @@ public class IntroProvider : IIntroProvider
                 return Enumerable.Empty<IntroInfo>();
             }
 
-            if (selection.Frequency == IntroFrequency.OncePerSession)
+            if (!ShouldPlay(plugin, selection.Frequency, user, item))
             {
-                var idleTimeout = TimeSpan.FromMinutes(Math.Max(1, configuration.SessionIdleMinutes));
-                if (!plugin.SessionTracker.ShouldPlay(user.Id, idleTimeout, DateTime.UtcNow))
-                {
-                    _logger.LogDebug(
-                        "IntroReplacer: skipping intro for '{Item}' (already played this session)",
-                        item.Name);
-                    return Enumerable.Empty<IntroInfo>();
-                }
+                return Enumerable.Empty<IntroInfo>();
             }
 
             _logger.LogInformation(
@@ -145,6 +148,85 @@ public class IntroProvider : IIntroProvider
         {
             _logger.LogError(ex, "IntroReplacer failed to resolve intros for {ItemName}", item.Name);
             return Enumerable.Empty<IntroInfo>();
+        }
+    }
+
+    private bool ShouldPlay(IntroReplacerPlugin plugin, IntroFrequency frequency, User user, BaseItem item)
+    {
+        if (frequency == IntroFrequency.EveryTime)
+        {
+            return true;
+        }
+
+        var wait = TimeSpan.FromMinutes(Math.Max(1, plugin.Configuration.RepeatAfterMinutes));
+
+        if (frequency == IntroFrequency.OncePerInterval)
+        {
+            return Allowed(
+                plugin.SessionTracker.ShouldPlayAfterWait(user.Id, wait, DateTime.UtcNow),
+                "the wait time has not passed");
+        }
+
+        var sessionId = ResolveSessionId(user);
+        if (string.IsNullOrEmpty(sessionId))
+        {
+            // No session to key on (for example an API-key request); fall back to the
+            // wait time so the intro is not played on every call.
+            return Allowed(
+                plugin.SessionTracker.ShouldPlayAfterWait(user.Id, wait, DateTime.UtcNow),
+                "the client session could not be identified");
+        }
+
+        return Allowed(
+            plugin.SessionTracker.ShouldPlayOncePerSession(sessionId),
+            "it already played in this client session");
+
+        bool Allowed(bool allowed, string reason)
+        {
+            if (!allowed)
+            {
+                _logger.LogDebug(
+                    "IntroReplacer: skipping intro for '{Item}' ({Reason})",
+                    item.Name,
+                    reason);
+            }
+
+            return allowed;
+        }
+    }
+
+    /// <summary>
+    /// Finds the Jellyfin session id of the client that made the current request.
+    /// </summary>
+    private string? ResolveSessionId(User user)
+    {
+        try
+        {
+            var httpContext = _httpContextAccessor.HttpContext;
+            var sessions = _sessionManager.Sessions
+                .Where(s => s.UserId == user.Id)
+                .ToList();
+
+            // Claim type constants live in Jellyfin.Api.Constants.InternalClaimTypes,
+            // which plugins do not reference; the literal values are stable.
+            var deviceId = httpContext?.User?.FindFirst("Jellyfin-DeviceId")?.Value;
+            if (!string.IsNullOrEmpty(deviceId))
+            {
+                var match = sessions.FirstOrDefault(s =>
+                    string.Equals(s.DeviceId, deviceId, StringComparison.OrdinalIgnoreCase));
+                if (match is not null)
+                {
+                    return match.Id;
+                }
+            }
+
+            // Fall back to the most recently active session for this user.
+            return sessions.OrderByDescending(s => s.LastActivityDate).FirstOrDefault()?.Id;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogDebug(ex, "IntroReplacer: could not resolve the client session");
+            return null;
         }
     }
 }

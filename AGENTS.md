@@ -30,6 +30,14 @@ lets the client skip the item's own intro. Target: **Jellyfin 10.10.x**.
 - **Episode intros are client-limited.** Web/desktop clients fetch intros for episodes
   (gated by the user's "Cinema mode" setting, default on). Some native TV/mobile apps
   ignore episode intros. Movies work on every client. No JS injection (user's choice).
+- **jellyfin-web only asks for intros when playback starts at index 0 of a list.**
+  `getIntros` returns `[]` without calling the server when `options.startPositionTicks`
+  or `options.startIndex` is truthy (`fullscreen === false` also suppresses). Pressing
+  play on an episode expands the queue to its series and sets `startIndex`, so the
+  pre-roll shows only for the first/unwatched-first episode and not for later episodes
+  or resumes. Intros are also fetched **once, for the first item of a queue**; queue
+  auto-advance never re-requests them. Not fixable server-side; the only universal fix
+  is HLS-level splicing. See `HANDOFF.md` §2d.
 - **There is no cross-client API to add an item to the media 3-dots menu.** Menu
   actions are client-side. Verified up to Jellyfin 12.0. Do not attempt server-side
   menu injection; the config lives on the plugin's dashboard page instead.
@@ -48,9 +56,13 @@ lets the client skip the item's own intro. Target: **Jellyfin 10.10.x**.
   (`MediaBrowser.Controller.Persistence`, DI singleton). `IChapterManager` only saves.
   `ChapterInfo` has only `StartPositionTicks` — the end comes from the next chapter or
   the item runtime. Audio-based auto-detection is **not** implemented.
-- **Once-per-session is a heuristic.** Jellyfin gives intro providers no client
-  session id, so `IntroSessionTracker` treats `SessionIdleMinutes` without an intro
-  as a new session (per user). Do not assume real session boundaries.
+- **Frequency has three modes.** `EveryTime`, `OncePerInterval` (uses
+  `RepeatAfterMinutes`) and `OncePerSession`. "Session" here is the Jellyfin session:
+  the provider resolves it from the request's `Jellyfin-DeviceId` claim and
+  `ISessionManager.Sessions`, and `Plugin.cs` forwards `ISessionManager.SessionEnded`
+  (client disconnect) to `IntroSessionTracker.NotifySessionEnded`. Keep the tracker free
+  of Jellyfin types so it stays unit-testable. If no session can be resolved (e.g. an
+  API-key request), it falls back to the wait-time behaviour.
 - **`IMediaSegmentManager` is in namespace `MediaBrowser.Controller`**, but its
   source folder in Jellyfin is misspelled `MediaSegements`. `MediaSegmentType` is in
   `Jellyfin.Data.Enums`. `IntroInfo` is in `MediaBrowser.Controller.Library`.
@@ -96,7 +108,7 @@ docker compose -f docker/compose.yaml up -d                          # then rest
 - `Services/IntroChapterDetector.cs` — chapter → intro range heuristic (unit-tested).
 - `Services/IntroSegmentProvider.cs` — `IMediaSegmentProvider` exposing the chapter-based Intro segment.
 - `Services/IntroSegmentHelper.cs` — applies `Replace`/`Prepend` to `Intro` media segments.
-- `Services/IntroSessionTracker.cs` — per-user "once per session" heuristic.
+- `Services/IntroSessionTracker.cs` — intro-repeat bookkeeping (wait-time + once-per-session); pure, unit-tested, no Jellyfin types.
 - `Api/IntroReplacerController.cs` — REST: `/IntroReplacer/Assets` (list/upload/delete), `/Libraries`, `/Users`, `/Targets` (series/season/episode tree), `/Test/{itemId}`.
 - `Configuration/config.html` — dashboard page. Inline `<script>` (no external controller file); talks to the endpoints above and to Jellyfin's standard `get/updatePluginConfiguration`.
 
@@ -110,6 +122,11 @@ docker compose -f docker/compose.yaml up -d                          # then rest
   (empty = all items), `ExcludedItemIds` holds deactivated season/episode ids.
   Matching runs against the item's ancestor chain, so excluding a season excludes
   its episodes. The config UI maintains these two lists from the target tree.
+- The hidden `Intro Replacer` library and its intro clips must never show up in the
+  config UI. `GET /Libraries` and `GET /Targets` filter it out using
+  `IntroLibraryManager.GetLibraryItemId()` (targets via
+  `ILibraryManager.GetCollectionFolders`). Add the same filter to any new endpoint that
+  enumerates libraries or items.
 - There is no `Chance`/probability field by design; ordering + conditions decide.
 - Owner in `build.yaml`/`manifest.json` is `flaconia`. Before publishing to a plugin
   repository, fill in `sourceUrl`/`checksum` in `manifest.json`.

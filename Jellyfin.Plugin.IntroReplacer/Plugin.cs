@@ -5,6 +5,7 @@ using Jellyfin.Plugin.IntroReplacer.Services;
 using MediaBrowser.Common.Configuration;
 using MediaBrowser.Common.Plugins;
 using MediaBrowser.Controller.Library;
+using MediaBrowser.Controller.Session;
 using MediaBrowser.Model.Plugins;
 using MediaBrowser.Model.Serialization;
 using Microsoft.Extensions.Logging;
@@ -27,12 +28,14 @@ public class IntroReplacerPlugin : BasePlugin<PluginConfiguration>, IHasWebPages
     /// <param name="xmlSerializer">XML serializer.</param>
     /// <param name="libraryManager">Library manager.</param>
     /// <param name="userManager">User manager.</param>
+    /// <param name="sessionManager">Session manager.</param>
     /// <param name="loggerFactory">Logger factory.</param>
     public IntroReplacerPlugin(
         IApplicationPaths applicationPaths,
         IXmlSerializer xmlSerializer,
         ILibraryManager libraryManager,
         IUserManager userManager,
+        ISessionManager sessionManager,
         ILoggerFactory loggerFactory)
         : base(applicationPaths, xmlSerializer)
     {
@@ -40,6 +43,7 @@ public class IntroReplacerPlugin : BasePlugin<PluginConfiguration>, IHasWebPages
         LibraryManager = libraryManager;
         AssetStore = new IntroAssetStore(applicationPaths.PluginConfigurationsPath);
         SessionTracker = new IntroSessionTracker();
+        sessionManager.SessionEnded += (_, e) => SessionTracker.NotifySessionEnded(e.SessionInfo?.Id);
         IntroLibrary = new IntroLibraryManager(libraryManager, userManager, loggerFactory, AssetStore.Directory);
     }
 
