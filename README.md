@@ -35,7 +35,9 @@ Local Intros plugin).
   preference — Jellyfin 10.10 has no server-side equivalent).
 
 There is **no** per-item "3-dots" menu: Jellyfin has no cross-client plugin API for
-that. Assignment happens on the plugin's dashboard page (`Dashboard → Plugins → Intro Replacer`).
+that. Assignment happens on the plugin's dashboard page (`Dashboard → Plugins → Intro Replacer`),
+which is styled like the rest of the Control Panel: collapsible rule cards, Jellyfin
+checkboxes and dropdowns, and a modal to browse your libraries and pick a video.
 
 > Client note: movies get intros on every client. Episode intros are handled by the
 > web client (browser and Jellyfin Media Player). Some native TV/mobile apps ignore

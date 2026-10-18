@@ -168,36 +168,51 @@ public class IntroReplacerController : ControllerBase
     /// Lists every video file in every library, so an existing video can be picked as
     /// an intro. The plugin's own hidden intro library is excluded.
     /// </summary>
-    /// <returns>The candidates, ordered by label.</returns>
+    /// <returns>The candidates, ordered by library then label.</returns>
     [HttpGet("Videos")]
     [ProducesResponseType(StatusCodes.Status200OK)]
     public ActionResult<IEnumerable<VideoCandidateDto>> GetVideos()
     {
         var introLibraryId = Plugin.IntroLibrary.GetLibraryItemId();
-
-        var items = _libraryManager.GetItemsResult(new InternalItemsQuery
+        var includeTypes = new[]
         {
-            IncludeItemTypes = new[]
+            BaseItemKind.Movie,
+            BaseItemKind.Episode,
+            BaseItemKind.Video,
+            BaseItemKind.MusicVideo,
+            BaseItemKind.Trailer
+        };
+
+        var candidates = new List<VideoCandidateDto>();
+
+        // One query per library: the library name comes for free, without walking the
+        // ancestor chain of every single item.
+        foreach (var library in _libraryManager.GetVirtualFolders())
+        {
+            if (!Guid.TryParse(library.ItemId, out var libraryId)
+                || libraryId == Guid.Empty
+                || libraryId == introLibraryId)
             {
-                BaseItemKind.Movie,
-                BaseItemKind.Episode,
-                BaseItemKind.Video,
-                BaseItemKind.MusicVideo,
-                BaseItemKind.Trailer
-            },
-            Recursive = true,
-            IsVirtualItem = false
-        }).Items;
+                continue;
+            }
 
-        var candidates = items
-            .Where(i => i is Video && !string.IsNullOrEmpty(i.Path))
-            .Where(i => introLibraryId is null
-                        || !_libraryManager.GetCollectionFolders(i).Any(f => f.Id == introLibraryId))
-            .Select(i => new VideoCandidateDto(i.Id, Describe(i), i.GetBaseItemKind().ToString()))
-            .OrderBy(c => c.Label, StringComparer.OrdinalIgnoreCase)
-            .ToList();
+            var items = _libraryManager.GetItemsResult(new InternalItemsQuery
+            {
+                IncludeItemTypes = includeTypes,
+                Recursive = true,
+                IsVirtualItem = false,
+                ParentId = libraryId
+            }).Items;
 
-        return Ok(candidates);
+            candidates.AddRange(items
+                .Where(i => i is Video && !string.IsNullOrEmpty(i.Path))
+                .Select(i => new VideoCandidateDto(i.Id, Describe(i), i.GetBaseItemKind().ToString(), library.Name)));
+        }
+
+        return Ok(candidates
+            .OrderBy(c => c.Library, StringComparer.OrdinalIgnoreCase)
+            .ThenBy(c => c.Label, StringComparer.OrdinalIgnoreCase)
+            .ToList());
     }
 
     private static string Describe(BaseItem item)
@@ -395,7 +410,8 @@ public record IntroAssetDto(Guid Id, string Name, bool Enabled, bool Exists, str
 /// <param name="Id">Item id.</param>
 /// <param name="Label">Human readable label (series/episode code, movie year, …).</param>
 /// <param name="Type">Item type name.</param>
-public record VideoCandidateDto(Guid Id, string Label, string Type);
+/// <param name="Library">Name of the library the video belongs to.</param>
+public record VideoCandidateDto(Guid Id, string Label, string Type, string Library);
 
 /// <summary>Library representation.</summary>
 /// <param name="Id">Library id.</param>

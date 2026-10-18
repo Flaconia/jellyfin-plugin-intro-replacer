@@ -6,62 +6,196 @@
 </head>
 <body>
 <div id="IntroReplacerPage" data-role="page" class="page type-interior pluginPage"
-     data-require="emby-input,emby-button,emby-select,emby-checkbox">
+     data-require="emby-input,emby-button,emby-checkbox,emby-select,paper-icon-button-light">
+    <style>
+        /* Local helpers so the page sits in the vanilla Control Panel layout.
+           The width limit itself comes from the global `form { max-width: 54em }`. */
+
+        /* Minutes-to-wait stepper: narrow field plus two flat (transparent) buttons,
+           replacing the stacked native spinner. */
+        .ir-stepper {
+            display: flex;
+            flex-wrap: wrap;
+            align-items: center;
+        }
+
+        .ir-stepper > .inputLabel {
+            flex-basis: 100%;
+        }
+
+        .ir-stepper > .emby-input {
+            width: 6em;
+            appearance: textfield;
+            -moz-appearance: textfield;
+        }
+
+        .ir-stepper > .emby-input::-webkit-outer-spin-button,
+        .ir-stepper > .emby-input::-webkit-inner-spin-button {
+            -webkit-appearance: none;
+            appearance: none;
+            margin: 0;
+        }
+
+        /* Collapsible section, styled like Jellyfin's emby-collapse sections. */
+        .ir-collapse {
+            margin: 0.5em 0 !important;
+        }
+
+        .ir-collapse > summary {
+            display: flex;
+            align-items: center;
+            position: relative;
+            cursor: pointer;
+            padding: 0.8em 2.4em 0.8em 1em;
+            border-bottom: 0.1em solid rgba(128, 128, 128, 0.35);
+            list-style: none;
+        }
+
+        .ir-collapse > summary::-webkit-details-marker {
+            display: none;
+        }
+
+        .ir-collapse > summary > .material-icons {
+            position: absolute;
+            right: 0.5em;
+            font-size: 1.5em;
+            transition: transform 180ms ease-out;
+        }
+
+        .ir-collapse[open] > summary > .material-icons {
+            transform: rotate(180deg);
+        }
+
+        .ir-collapseTitle {
+            margin: 0;
+            padding: 0;
+            flex-grow: 1;
+        }
+
+        .ir-collapseEnabled {
+            flex: 0 0 auto;
+            width: auto;
+            margin-right: 0.5em;
+        }
+
+        .ir-collapseBody {
+            padding: 1em;
+        }
+
+        .ir-tree .emby-checkbox-label {
+            margin: 0.2em 0;
+        }
+
+        .ir-assetRow {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 0.2em 0;
+        }
+
+        .ir-assetRow > .emby-checkbox-label {
+            width: auto;
+            flex-grow: 1;
+        }
+
+        .ir-pickRow {
+            border-bottom: 1px solid rgba(128, 128, 128, 0.25);
+        }
+
+        .ir-pickRow.selected {
+            background: rgba(0, 164, 220, 0.2);
+        }
+
+        .ir-pickRowOk:disabled {
+            opacity: 0.5;
+        }
+    </style>
+
     <div data-role="content">
         <div class="content-primary">
-            <h2>Intro Replacer</h2>
-            <p class="fieldDescription">
-                Rules are evaluated top to bottom; the first enabled matching rule wins.
-                An empty condition matches everything. The custom intro plays first, then the
-                episode/movie starts. With <em>Replace</em> the item's own intro is skipped;
-                with <em>Prepend</em> the item plays from the beginning.
-            </p>
-
-            <h3>Settings</h3>
-            <label class="checkboxContainer">
-                <input id="moviesOnly" type="checkbox" is="emby-checkbox" />
-                <span>Only play intros for movies</span>
-            </label>
-            <div class="inputContainer">
-                <label class="inputLabel inputLabelUnfocused" for="repeatAfterMinutes">Time to wait before the intro plays again (minutes)</label>
-                <input id="repeatAfterMinutes" is="emby-input" type="number" min="1" />
-                <div class="fieldDescription">
-                    Used by the "Only after the wait time" frequency below.
+            <form id="introReplacerForm">
+                <div class="verticalSection">
+                    <div class="sectionTitleContainer flex align-items-center">
+                        <h1 class="pageTitle">Intro Replacer</h1>
+                    </div>
+                    <p class="fieldDescription">
+                        Plays a custom intro before the episode or movie you start, then lets you
+                        skip the item's own intro.
+                    </p>
                 </div>
-            </div>
 
-            <h3>Intro files</h3>
-            <p class="fieldDescription">
-                Upload a video, or pick any video already in your libraries. Nothing is copied or modified.
-            </p>
-            <div class="inputContainer">
-                <input id="uploadFile" type="file" accept="video/*" />
-                <button id="uploadBtn" is="emby-button" type="button" class="raised emby-button">
-                    <span>Upload intro</span>
-                </button>
-            </div>
-            <div class="inputContainer">
-                <label class="inputLabel inputLabelUnfocused" for="videoFilter">Add a video already on the server</label>
-                <input id="videoFilter" is="emby-input" type="text" placeholder="Filter by name" />
-                <select id="videoSelect" is="emby-select"></select>
-                <button id="addVideoBtn" is="emby-button" type="button" class="raised emby-button">
-                    <span>Add as intro</span>
-                </button>
-                <div id="videoHint" class="fieldDescription"></div>
-            </div>
-            <div id="assetList"></div>
+                <div class="verticalSection">
+                    <h2 class="sectionTitle">Settings</h2>
 
-            <h3>Rules</h3>
-            <div id="ruleList"></div>
-            <button id="addRuleBtn" is="emby-button" type="button" class="raised emby-button">
-                <span>Add rule</span>
-            </button>
+                    <div class="checkboxContainer checkboxContainer-withDescription">
+                        <label>
+                            <input type="checkbox" is="emby-checkbox" id="moviesOnly" />
+                            <span>Only play intros for movies</span>
+                        </label>
+                        <div class="fieldDescription checkboxFieldDescription">
+                            Turning this on skips episodes and seasons. Some TV and mobile apps do not
+                            ask for intros on episodes anyway, while movies work everywhere.
+                        </div>
+                    </div>
 
-            <div style="margin-top:2em">
-                <button id="saveBtn" is="emby-button" type="button" class="raised button-submit emby-button">
-                    <span>Save</span>
-                </button>
-            </div>
+                    <div class="inputContainer">
+                        <div class="ir-stepper">
+                            <input type="number" is="emby-input" id="repeatAfterMinutes" min="1" max="99999"
+                                   label="Time to wait before the intro plays again (minutes)" />
+                            <button type="button" is="paper-icon-button-light" id="minutesDown" title="One minute less">
+                                <span class="material-icons remove" aria-hidden="true"></span>
+                            </button>
+                            <button type="button" is="paper-icon-button-light" id="minutesUp" title="One minute more">
+                                <span class="material-icons add" aria-hidden="true"></span>
+                            </button>
+                        </div>
+                        <div class="fieldDescription">
+                            Used by the "Only after the wait time" frequency below.
+                        </div>
+                    </div>
+                </div>
+
+                <div class="verticalSection">
+                    <h2 class="sectionTitle">Intro files</h2>
+                    <p class="fieldDescription">
+                        Upload a video file, or pick any video that is already in one of your libraries.
+                        Nothing is copied and your media is never modified.
+                    </p>
+
+                    <div class="inputContainer">
+                        <button type="button" is="emby-button" id="uploadBtn" class="raised">
+                            <span>Upload intro…</span>
+                        </button>
+                        <button type="button" is="emby-button" id="pickVideoBtn" class="raised">
+                            <span>Add a video from a library…</span>
+                        </button>
+                        <input type="file" id="uploadFile" accept="video/*" class="hide" />
+                    </div>
+
+                    <div id="assetList"></div>
+                </div>
+
+                <div class="verticalSection">
+                    <h2 class="sectionTitle">Rules</h2>
+                    <p class="fieldDescription">
+                        Rules are evaluated from top to bottom and the first enabled rule that matches
+                        wins. A rule with no condition matches every item. <em>Replace</em> lets the
+                        client skip the item's own intro, <em>Prepend</em> plays the item from the start.
+                    </p>
+
+                    <div id="ruleList"></div>
+
+                    <button type="button" is="emby-button" id="addRuleBtn" class="raised">
+                        <span>Add rule</span>
+                    </button>
+                </div>
+
+                <div class="verticalSection">
+                    <button type="submit" is="emby-button" id="saveBtn" class="raised button-submit block">
+                        <span>Save</span>
+                    </button>
+                </div>
+            </form>
         </div>
     </div>
 
@@ -84,6 +218,23 @@
 
             const guid = () => ([1e7] + -1e3 + -4e3 + -8e3 + -1e11).replace(/[018]/g, c =>
                 (c ^ crypto.getRandomValues(new Uint8Array(1))[0] & 15 >> c / 4).toString(16));
+
+            const escapeHtml = (value) => String(value === null || value === undefined ? '' : value)
+                .replace(/&/g, '&amp;')
+                .replace(/</g, '&lt;')
+                .replace(/>/g, '&gt;')
+                .replace(/"/g, '&quot;');
+
+            // Jellyfin's custom elements (is="emby-input", is="emby-checkbox", …) are only
+            // upgraded when markup goes through the HTML parser, so build them from HTML
+            // instead of document.createElement + setAttribute. Returns the wrapper.
+            const frag = (html) => {
+                const wrapper = document.createElement('div');
+                wrapper.innerHTML = html;
+                return wrapper;
+            };
+
+            const elem = (html) => frag(html).firstElementChild;
 
             const newRule = () => ({
                 Id: guid(),
@@ -108,6 +259,77 @@
             const csv = (arr) => (arr || []).join(', ');
             const parseCsv = (value) => value.split(',').map(s => s.trim()).filter(s => s.length > 0);
 
+            // ---------- generic form controls ----------
+            const checkbox = (labelText, checked, onChange) => {
+                const label = elem('<label><input type="checkbox" is="emby-checkbox" /><span></span></label>');
+                const input = label.querySelector('input');
+                label.querySelector('span').textContent = labelText;
+                input.checked = checked;
+                input.addEventListener('change', () => onChange(input.checked));
+                return label;
+            };
+
+            const checkboxList = () => {
+                const list = document.createElement('div');
+                list.className = 'checkboxList paperList';
+                list.style.padding = '.5em 1em';
+                return list;
+            };
+
+            const button = (text, onClick) => {
+                const btn = elem('<button type="button" is="emby-button" class="raised"><span></span></button>');
+                btn.querySelector('span').textContent = text;
+                btn.addEventListener('click', onClick);
+                return btn;
+            };
+
+            const field = (labelText, control) => {
+                const wrap = document.createElement('div');
+                wrap.className = 'inputContainer';
+                const label = document.createElement('div');
+                label.className = 'checkboxListLabel';
+                label.textContent = labelText;
+                wrap.appendChild(label);
+                wrap.appendChild(control);
+                return wrap;
+            };
+
+            const textField = (labelText, value, onChange) => {
+                const wrap = frag(
+                    '<div class="inputContainer">'
+                    + '<input type="text" is="emby-input" label="' + escapeHtml(labelText) + '" />'
+                    + '</div>').firstElementChild;
+                const input = wrap.querySelector('input');
+                input.value = value || '';
+                input.addEventListener('input', () => onChange(input.value));
+                return wrap;
+            };
+
+            const selectField = (labelText, options, value, onChange) => {
+                const wrap = frag(
+                    '<div class="selectContainer">'
+                    + '<select is="emby-select" label="' + escapeHtml(labelText) + '"></select>'
+                    + '</div>').firstElementChild;
+                const select = wrap.querySelector('select');
+                options.forEach(opt => {
+                    const option = document.createElement('option');
+                    option.value = opt.value;
+                    option.textContent = opt.label;
+                    if (opt.value === value) option.selected = true;
+                    select.appendChild(option);
+                });
+                select.addEventListener('change', () => onChange(select.value));
+                return wrap;
+            };
+
+            const hint = (text) => {
+                const div = document.createElement('div');
+                div.className = 'fieldDescription';
+                div.textContent = text;
+                return div;
+            };
+
+            // ---------- load ----------
             const load = async () => {
                 Dashboard.showLoadingMsg();
                 const [cfg, libs, usrs, tree, assets, vids] = await Promise.all([
@@ -135,92 +357,206 @@
 
                 document.querySelector('#moviesOnly').checked = !!config.MoviesOnly;
                 document.querySelector('#repeatAfterMinutes').value = config.RepeatAfterMinutes || 180;
-                renderVideoSelect();
                 renderAssets();
                 renderRules();
                 Dashboard.hideLoadingMsg();
             };
 
-            // ---------- existing library videos ----------
-            const renderVideoSelect = () => {
-                const sel = document.querySelector('#videoSelect');
-                const filter = (document.querySelector('#videoFilter').value || '').trim().toLowerCase();
-                const matches = videos.filter(v => !filter || v.Label.toLowerCase().includes(filter));
-                const shown = matches.slice(0, 500);
-
-                sel.innerHTML = '';
-                if (shown.length === 0) {
-                    const opt = document.createElement('option');
-                    opt.value = '';
-                    opt.textContent = videos.length === 0
-                        ? 'No videos found in your libraries'
-                        : 'Nothing matches that filter';
-                    sel.appendChild(opt);
-                } else {
-                    shown.forEach(v => {
-                        const opt = document.createElement('option');
-                        opt.value = v.Id;
-                        opt.textContent = v.Label + '  [' + v.Type + ']';
-                        sel.appendChild(opt);
-                    });
-                }
-
-                document.querySelector('#videoHint').textContent = matches.length > shown.length
-                    ? 'Showing ' + shown.length + ' of ' + matches.length + ' matches — type more to narrow it down.'
-                    : matches.length + ' of ' + videos.length + ' videos.';
-            };
-
-            const addLibraryVideo = () => {
-                const sel = document.querySelector('#videoSelect');
-                if (!sel.value) return;
-                Dashboard.showLoadingMsg();
-                fetch(api('/Assets/FromLibrary/' + sel.value), {
-                    method: 'POST',
-                    headers: { 'X-Emby-Token': token() }
-                }).then(() => load()).catch(() => Dashboard.hideLoadingMsg());
-            };
-
             // ---------- assets ----------
+            // Refresh the intro list without reloading the rules, so edits that have
+            // not been saved yet are not thrown away.
+            const reloadAssets = async () => {
+                const [saved, assets] = await Promise.all([
+                    ApiClient.getPluginConfiguration(pluginId),
+                    ApiClient.getJSON(api('/Assets'))
+                ]);
+                config.Assets = saved.Assets || [];
+                const ids = new Set(config.Assets.map(a => a.Id));
+                config.Rules.forEach(r => {
+                    r.AssetIds = (r.AssetIds || []).filter(id => ids.has(id));
+                });
+                assetExists = {};
+                (assets || []).forEach(a => { assetExists[a.Id] = a.Exists; });
+                renderAssets();
+                renderRules();
+            };
+
+            const describeAsset = (asset) => asset.Name
+                + (asset.LibraryItemId && asset.LibraryItemId !== '00000000-0000-0000-0000-000000000000'
+                    ? ' (from a library)'
+                    : '')
+                + (assetExists[asset.Id] ? '' : ' (missing)');
+
             const renderAssets = () => {
                 const host = document.querySelector('#assetList');
                 host.innerHTML = '';
                 if (config.Assets.length === 0) {
-                    host.innerHTML = '<p class="fieldDescription">No intro videos yet. Upload one or add a library video above.</p>';
+                    host.innerHTML = '<p class="fieldDescription">'
+                        + 'No intro videos yet. Upload one, or add a video from a library.</p>';
                     return;
                 }
+
+                const list = checkboxList();
                 config.Assets.forEach(asset => {
                     const row = document.createElement('div');
-                    row.className = 'listItem';
-                    const label = document.createElement('label');
-                    label.className = 'checkboxContainer';
-                    const cb = document.createElement('input');
-                    cb.type = 'checkbox';
-                    cb.checked = asset.Enabled;
-                    cb.addEventListener('change', () => { asset.Enabled = cb.checked; });
-                    label.appendChild(cb);
-                    const name = document.createElement('span');
-                    name.textContent = asset.Name
-                        + (asset.LibraryItemId && asset.LibraryItemId !== '00000000-0000-0000-0000-000000000000'
-                            ? ' (from a library)'
-                            : '')
-                        + (assetExists[asset.Id] ? '' : ' (missing)');
-                    label.appendChild(name);
-                    row.appendChild(label);
-                    const del = document.createElement('button');
-                    del.setAttribute('is', 'emby-button');
-                    del.className = 'emby-button';
-                    del.textContent = 'Delete';
-                    del.addEventListener('click', () => deleteAsset(asset.Id));
-                    row.appendChild(del);
-                    host.appendChild(row);
+                    row.className = 'ir-assetRow';
+                    row.appendChild(checkbox(describeAsset(asset), asset.Enabled, v => { asset.Enabled = v; }));
+                    row.appendChild(button('Delete', () => deleteAsset(asset.Id)));
+                    list.appendChild(row);
                 });
+                host.appendChild(list);
             };
 
             const deleteAsset = (id) => {
                 fetch(api('/Assets/' + id), {
                     method: 'DELETE',
                     headers: { 'X-Emby-Token': token() }
-                }).then(load);
+                }).then(reloadAssets);
+            };
+
+            // ---------- pick a video that already exists in a library ----------
+            let picker = null;
+            let pickedVideoId = null;
+
+            const closeVideoPicker = () => {
+                if (!picker) return;
+                document.removeEventListener('keydown', onPickerKey);
+                picker.dialog.remove();
+                picker.backdrop.remove();
+                picker = null;
+            };
+
+            const onPickerKey = (e) => {
+                if (e.key === 'Escape') closeVideoPicker();
+            };
+
+            const openVideoPicker = () => {
+                closeVideoPicker();
+                pickedVideoId = null;
+
+                const backdrop = document.createElement('div');
+                backdrop.className = 'dialogBackdrop dialogBackdropOpened';
+                backdrop.addEventListener('click', closeVideoPicker);
+                document.body.appendChild(backdrop);
+
+                const dialog = elem(
+                    '<div class="dialogContainer">'
+                    + '<div class="dialog dialog-fixedSize dialog-small formDialog paperList" modal="modal">'
+                    + '<div class="formDialogHeader">'
+                    + '<button type="button" is="paper-icon-button-light" class="btnCancel autoSize" tabindex="-1" title="Back">'
+                    + '<span class="material-icons arrow_back" aria-hidden="true"></span></button>'
+                    + '<h3 class="formDialogHeaderTitle">Add a video from a library</h3>'
+                    + '</div>'
+                    + '<div class="formDialogContent smoothScrollY">'
+                    + '<div class="dialogContentInner dialog-content-centered">'
+                    + '<div class="inputContainer">'
+                    + '<input type="text" is="emby-input" id="irPickFilter" label="Filter" />'
+                    + '</div>'
+                    + '<div id="irPickList"></div>'
+                    + '</div>'
+                    + '</div>'
+                    + '<div class="formDialogFooter">'
+                    + '<button type="button" is="emby-button" id="irPickOk" class="raised button-submit block formDialogFooterItem ir-pickRowOk" disabled>'
+                    + '<span>Add as intro</span></button>'
+                    + '<button type="button" is="emby-button" id="irPickCancel" class="raised block formDialogFooterItem">'
+                    + '<span>Cancel</span></button>'
+                    + '</div>'
+                    + '</div>'
+                    + '</div>');
+                document.body.appendChild(dialog);
+
+                picker = { dialog, backdrop };
+
+                const list = dialog.querySelector('#irPickList');
+                const okButton = dialog.querySelector('#irPickOk');
+                const filterInput = dialog.querySelector('#irPickFilter');
+                let filterTimer = null;
+
+                const renderList = () => {
+                    const filter = (filterInput.value || '').trim().toLowerCase();
+                    const matches = videos.filter(v => !filter || v.Label.toLowerCase().includes(filter));
+
+                    list.innerHTML = '';
+                    if (matches.length === 0) {
+                        list.innerHTML = '<p class="fieldDescription">'
+                            + (videos.length === 0 ? 'No videos found in your libraries.' : 'Nothing matches that filter.')
+                            + '</p>';
+                        return;
+                    }
+
+                    // Keep the list snappy on very large libraries.
+                    const max = 1000;
+                    let rendered = 0;
+                    let library = null;
+                    let group = null;
+
+                    const startGroup = (name, total) => {
+                        const header = document.createElement('div');
+                        header.className = 'checkboxListLabel';
+                        header.style.margin = '0.75em 0 0.25em';
+                        header.textContent = name + ' — ' + total + (total === 1 ? ' video' : ' videos');
+                        list.appendChild(header);
+                        group = document.createElement('div');
+                        list.appendChild(group);
+                    };
+
+                    matches.forEach(v => {
+                        if (v.Library !== library) {
+                            library = v.Library;
+                            startGroup(library, matches.filter(m => m.Library === library).length);
+                        }
+                        if (rendered >= max) return;
+
+                        const row = elem(
+                            '<div class="listItem ir-pickRow">'
+                            + '<div class="listItemBody two-line">'
+                            + '<div class="listItemBodyText"></div>'
+                            + '<div class="listItemBodyText secondary"></div>'
+                            + '</div>'
+                            + '</div>');
+                        const texts = row.querySelectorAll('.listItemBodyText');
+                        texts[0].textContent = v.Label;
+                        texts[1].textContent = v.Type;
+                        if (v.Id === pickedVideoId) row.classList.add('selected');
+                        row.addEventListener('click', () => {
+                            pickedVideoId = v.Id;
+                            list.querySelectorAll('.ir-pickRow.selected').forEach(n => n.classList.remove('selected'));
+                            row.classList.add('selected');
+                            okButton.disabled = false;
+                        });
+                        group.appendChild(row);
+                        rendered++;
+                    });
+
+                    if (rendered < matches.length) {
+                        list.appendChild(hint('Showing the first ' + rendered + ' of ' + matches.length
+                            + ' matches — type more to narrow the list down.'));
+                    }
+                };
+
+                filterInput.addEventListener('input', () => {
+                    clearTimeout(filterTimer);
+                    filterTimer = setTimeout(renderList, 150);
+                });
+
+                dialog.querySelector('#irPickCancel').addEventListener('click', closeVideoPicker);
+                dialog.querySelector('.btnCancel').addEventListener('click', closeVideoPicker);
+                okButton.addEventListener('click', () => {
+                    if (!pickedVideoId) return;
+                    Dashboard.showLoadingMsg();
+                    fetch(api('/Assets/FromLibrary/' + pickedVideoId), {
+                        method: 'POST',
+                        headers: { 'X-Emby-Token': token() }
+                    }).then(() => {
+                        closeVideoPicker();
+                        Dashboard.showLoadingMsg();
+                        reloadAssets().then(() => Dashboard.hideLoadingMsg());
+                    }).catch(() => Dashboard.hideLoadingMsg());
+                });
+                document.addEventListener('keydown', onPickerKey);
+
+                renderList();
+                filterInput.focus();
             };
 
             // ---------- rules ----------
@@ -228,60 +564,6 @@
                 const host = document.querySelector('#ruleList');
                 host.innerHTML = '';
                 config.Rules.forEach((rule, index) => host.appendChild(renderRule(rule, index)));
-            };
-
-            const field = (labelText, input) => {
-                const wrap = document.createElement('div');
-                wrap.className = 'inputContainer';
-                const label = document.createElement('label');
-                label.className = 'inputLabel inputLabelUnfocused';
-                label.textContent = labelText;
-                wrap.appendChild(label);
-                wrap.appendChild(input);
-                return wrap;
-            };
-
-            const textInput = (value, onChange) => {
-                const el = document.createElement('input');
-                el.setAttribute('is', 'emby-input');
-                el.type = 'text';
-                el.value = value || '';
-                el.addEventListener('input', () => onChange(el.value));
-                return el;
-            };
-
-            const checkbox = (labelText, checked, onChange) => {
-                const label = document.createElement('label');
-                label.className = 'checkboxContainer';
-                const cb = document.createElement('input');
-                cb.type = 'checkbox';
-                cb.checked = checked;
-                cb.addEventListener('change', () => onChange(cb.checked));
-                label.appendChild(cb);
-                const span = document.createElement('span');
-                span.textContent = labelText;
-                label.appendChild(span);
-                return label;
-            };
-
-            const radioGroup = (name, options, value, onChange) => {
-                const wrap = document.createElement('div');
-                options.forEach(opt => {
-                    const label = document.createElement('label');
-                    label.className = 'checkboxContainer';
-                    const input = document.createElement('input');
-                    input.type = 'radio';
-                    input.name = name;
-                    input.value = opt.value;
-                    input.checked = value === opt.value;
-                    input.addEventListener('change', () => onChange(opt.value));
-                    label.appendChild(input);
-                    const span = document.createElement('span');
-                    span.textContent = opt.label;
-                    label.appendChild(span);
-                    wrap.appendChild(label);
-                });
-                return wrap;
             };
 
             const renderRule = (rule, index) => {
@@ -292,16 +574,14 @@
                 rule.AssetIds = rule.AssetIds || [];
 
                 const card = document.createElement('details');
-                card.style.border = '1px solid rgba(255,255,255,0.15)';
-                card.style.padding = '1em';
-                card.style.margin = '1em 0';
+                card.className = 'ir-collapse paperList';
                 card.open = openState[rule.Id] !== false;
                 card.addEventListener('toggle', () => { openState[rule.Id] = card.open; });
 
                 const summary = document.createElement('summary');
-                summary.style.cursor = 'pointer';
 
-                const title = document.createElement('strong');
+                const title = document.createElement('h3');
+                title.className = 'ir-collapseTitle';
                 const updateTitle = () => {
                     title.textContent = 'Rule ' + (index + 1) + ' — ' + (rule.Name || 'Untitled');
                     title.style.opacity = rule.Enabled ? '1' : '0.5';
@@ -310,18 +590,59 @@
                 summary.appendChild(title);
 
                 const enabled = checkbox('Enabled', rule.Enabled, v => { rule.Enabled = v; updateTitle(); });
-                enabled.style.display = 'inline-block';
-                enabled.style.marginLeft = '1.5em';
+                enabled.classList.add('ir-collapseEnabled');
                 // Keep clicks on the checkbox from collapsing/expanding the rule.
                 enabled.addEventListener('click', e => e.stopPropagation());
                 summary.appendChild(enabled);
 
+                summary.appendChild(elem('<span class="material-icons" aria-hidden="true">expand_more</span>'));
                 card.appendChild(summary);
 
-                card.appendChild(field('Name', textInput(rule.Name, v => { rule.Name = v; updateTitle(); })));
+                const body = document.createElement('div');
+                body.className = 'ir-collapseBody';
+                card.appendChild(body);
+
+                body.appendChild(textField('Name', rule.Name, v => { rule.Name = v; updateTitle(); }));
+
+                // intros
+                const assetWrap = checkboxList();
+                config.Assets.forEach(asset => {
+                    assetWrap.appendChild(checkbox(describeAsset(asset), rule.AssetIds.includes(asset.Id), on => {
+                        rule.AssetIds = on
+                            ? [...new Set([...rule.AssetIds, asset.Id])]
+                            : rule.AssetIds.filter(id => id !== asset.Id);
+                    }));
+                });
+                if (config.Assets.length === 0) {
+                    assetWrap.appendChild(elem('<div class="fieldDescription">Upload an intro file first.</div>'));
+                }
+                body.appendChild(field('Intros (pick one or more)', assetWrap));
+
+                body.appendChild(selectField('Playback',
+                    [{ value: 'RandomOne', label: 'Play one random intro' },
+                     { value: 'SequentialAll', label: 'Play all selected intros in order' }],
+                    rule.PlaybackMode,
+                    v => rule.PlaybackMode = v));
+
+                const placement = selectField('What to do with the item\'s own intro',
+                    [{ value: 'Replace', label: 'Replace it (the client can skip the original intro)' },
+                     { value: 'Prepend', label: 'Prepend (play the item from the beginning)' }],
+                    rule.Placement,
+                    v => rule.Placement = v);
+                placement.appendChild(hint('Replace adds an "Intro" segment so the client can skip the original intro (it shows a Skip button). For hands-free skipping, set Playback -> Media Segment Actions -> Intro Segments -> Skip in the client. Prepend removes those markers so the item plays from the start.'));
+                body.appendChild(placement);
+
+                const frequency = selectField('Frequency',
+                    [{ value: 'EveryTime', label: 'Every time you start an episode or movie' },
+                     { value: 'OncePerInterval', label: 'Only after the wait time has passed' },
+                     { value: 'OncePerSession', label: 'Once per session (until you disconnect)' }],
+                    rule.Frequency,
+                    v => rule.Frequency = v);
+                frequency.appendChild(hint('"Every time" plays before the title you start; if you start a list, it plays before the first title only. "Only after the wait time" replays it once the minutes set at the top have passed. "Once per session" replays it after you close the app or sign out.'));
+                body.appendChild(frequency);
 
                 // libraries
-                const libWrap = document.createElement('div');
+                const libWrap = checkboxList();
                 libraries.forEach(lib => {
                     libWrap.appendChild(checkbox(lib.Name, rule.LibraryIds.includes(lib.Id), on => {
                         rule.LibraryIds = on
@@ -329,11 +650,13 @@
                             : rule.LibraryIds.filter(id => id !== lib.Id);
                     }));
                 });
-                if (libraries.length === 0) libWrap.innerHTML = '<p class="fieldDescription">No libraries found.</p>';
-                card.appendChild(field('Libraries (empty = all)', libWrap));
+                if (libraries.length === 0) {
+                    libWrap.appendChild(elem('<div class="fieldDescription">No libraries found.</div>'));
+                }
+                body.appendChild(field('Libraries (empty = all)', libWrap));
 
                 // users
-                const userWrap = document.createElement('div');
+                const userWrap = checkboxList();
                 users.forEach(u => {
                     userWrap.appendChild(checkbox(u.Name, rule.UserIds.includes(u.Id), on => {
                         rule.UserIds = on
@@ -341,14 +664,14 @@
                             : rule.UserIds.filter(id => id !== u.Id);
                     }));
                 });
-                if (users.length === 0) userWrap.innerHTML = '<p class="fieldDescription">No users found.</p>';
-                card.appendChild(field('Active for users (empty = all)', userWrap));
+                if (users.length === 0) {
+                    userWrap.appendChild(elem('<div class="fieldDescription">No users found.</div>'));
+                }
+                body.appendChild(field('Active for users (empty = all)', userWrap));
 
                 // target tree (collapsible: it is the longest part of a rule)
                 const targetBox = document.createElement('details');
-                targetBox.style.border = '1px solid rgba(255,255,255,0.1)';
-                targetBox.style.padding = '0.5em';
-                targetBox.style.margin = '0.5em 0';
+                targetBox.className = 'ir-collapse';
                 targetBox.open = openState[rule.Id + ':targets'] === true;
                 targetBox.addEventListener('toggle', () => {
                     openState[rule.Id + ':targets'] = targetBox.open;
@@ -356,125 +679,70 @@
                 });
 
                 const targetSummary = document.createElement('summary');
-                targetSummary.style.cursor = 'pointer';
-                targetSummary.textContent = 'Targets';
+                const targetTitle = document.createElement('h3');
+                targetTitle.className = 'ir-collapseTitle';
+                targetTitle.textContent = 'Targets';
+                targetSummary.appendChild(targetTitle);
                 const targetSummaryInfo = document.createElement('span');
-                targetSummaryInfo.style.opacity = '0.7';
+                targetSummaryInfo.className = 'fieldDescription';
                 targetSummary.appendChild(targetSummaryInfo);
+                targetSummary.appendChild(elem('<span class="material-icons" aria-hidden="true">expand_more</span>'));
 
                 const updateTargetSummary = () => {
                     const active = targets.filter(t => rule.TargetItemIds.includes(t.Id)).length;
                     const excluded = rule.ExcludedItemIds.length;
-                    targetSummaryInfo.textContent = ' — ' + (active === 0
-                        ? 'all items'
-                        : active + ' selected' + (excluded > 0 ? ', ' + excluded + ' excluded' : ''));
+                    targetSummaryInfo.textContent = active === 0
+                        ? ' — all items'
+                        : ' — ' + active + ' selected' + (excluded > 0 ? ', ' + excluded + ' excluded' : '');
                 };
 
                 const treeHost = document.createElement('div');
+                treeHost.className = 'ir-tree';
                 treeHost.style.maxHeight = '22em';
                 treeHost.style.overflow = 'auto';
                 treeHost.style.marginTop = '0.5em';
-                const treeHeading = document.createElement('div');
-                treeHeading.className = 'fieldDescription';
-                treeHeading.textContent = 'Series/movies targeted (empty = all). Activating a series activates all its seasons and episodes.';
-                const treeBody = document.createElement('div');
-                treeHost.appendChild(treeHeading);
-                treeHost.appendChild(treeBody);
+                treeHost.appendChild(hint('Series and movies to target (empty = all). Activating a series activates all its seasons and episodes.'));
 
                 const refreshTree = () => {
-                    treeBody.innerHTML = '';
-                    targets.forEach(node => treeBody.appendChild(renderTargetNode(rule, node, refreshTree, updateTargetSummary)));
+                    treeHost.querySelectorAll('.ir-treeNode').forEach(n => n.remove());
+                    targets.forEach(node => treeHost.appendChild(renderTargetNode(rule, node, refreshTree, updateTargetSummary)));
                     updateTargetSummary();
                 };
                 // Only build the (potentially large) tree once the section is opened.
                 const ensureTree = () => {
-                    if (treeBody.childElementCount === 0) refreshTree();
+                    if (!treeHost.querySelector('.ir-treeNode')) refreshTree();
                 };
                 updateTargetSummary();
                 if (targetBox.open) ensureTree();
 
                 targetBox.appendChild(targetSummary);
                 targetBox.appendChild(treeHost);
-                card.appendChild(targetBox);
+                body.appendChild(targetBox);
 
-                card.appendChild(field('Include tags (comma separated)', textInput(csv(rule.IncludeTags), v => rule.IncludeTags = parseCsv(v))));
-                card.appendChild(field('Exclude tags (comma separated)', textInput(csv(rule.ExcludeTags), v => rule.ExcludeTags = parseCsv(v))));
-                card.appendChild(field('Genres (comma separated)', textInput(csv(rule.Genres), v => rule.Genres = parseCsv(v))));
-                card.appendChild(field('Studios (comma separated)', textInput(csv(rule.Studios), v => rule.Studios = parseCsv(v))));
+                body.appendChild(textField('Include tags (comma separated)', csv(rule.IncludeTags), v => rule.IncludeTags = parseCsv(v)));
+                body.appendChild(textField('Exclude tags (comma separated)', csv(rule.ExcludeTags), v => rule.ExcludeTags = parseCsv(v)));
+                body.appendChild(textField('Genres (comma separated)', csv(rule.Genres), v => rule.Genres = parseCsv(v)));
+                body.appendChild(textField('Studios (comma separated)', csv(rule.Studios), v => rule.Studios = parseCsv(v)));
 
-                // intros
-                const assetWrap = document.createElement('div');
-                config.Assets.forEach(asset => {
-                    assetWrap.appendChild(checkbox(asset.Name, rule.AssetIds.includes(asset.Id), on => {
-                        rule.AssetIds = on
-                            ? [...new Set([...rule.AssetIds, asset.Id])]
-                            : rule.AssetIds.filter(id => id !== asset.Id);
-                    }));
-                });
-                if (config.Assets.length === 0) assetWrap.innerHTML = '<p class="fieldDescription">Upload an intro file first.</p>';
-                card.appendChild(field('Intros (pick one or more)', assetWrap));
-
-                const mode = document.createElement('select');
-                mode.setAttribute('is', 'emby-select');
-                ['RandomOne', 'SequentialAll'].forEach(m => {
-                    const opt = document.createElement('option');
-                    opt.value = m;
-                    opt.textContent = m === 'RandomOne' ? 'Play one random intro' : 'Play all selected intros in order';
-                    if (rule.PlaybackMode === m) opt.selected = true;
-                    mode.appendChild(opt);
-                });
-                mode.addEventListener('change', () => rule.PlaybackMode = mode.value);
-                card.appendChild(field('Playback', mode));
-
-                const placementField = field('What to do with the item\'s own intro',
-                    radioGroup('placement-' + index,
-                        [{ value: 'Replace', label: 'Replace it (skip the original intro)' },
-                         { value: 'Prepend', label: 'Prepend (play item from the beginning)' }],
-                        rule.Placement,
-                        v => rule.Placement = v));
-                const placementHint = document.createElement('div');
-                placementHint.className = 'fieldDescription';
-                placementHint.textContent = 'Replace adds an "Intro" segment so the client can skip the original intro (it shows a Skip button). For hands-free skipping, set Playback -> Media Segment Actions -> Intro Segments -> Skip in the user\'s client settings. Prepend removes those markers so the item plays from the start.';
-                placementField.appendChild(placementHint);
-                card.appendChild(placementField);
-
-                const frequencyField = field('Frequency',
-                    radioGroup('frequency-' + index,
-                        [{ value: 'EveryTime', label: 'Every time you start an episode or movie' },
-                         { value: 'OncePerInterval', label: 'Only after the wait time has passed' },
-                         { value: 'OncePerSession', label: 'Once per session' }],
-                        rule.Frequency,
-                        v => rule.Frequency = v));
-                const frequencyHint = document.createElement('div');
-                frequencyHint.className = 'fieldDescription';
-                frequencyHint.textContent = 'Every time plays before the title you start; if you start a list, it plays before the first title only. "Only after the wait time" replays it once the minutes set at the top have passed. "Once per session" replays it after you close the app or sign out.';
-                frequencyField.appendChild(frequencyHint);
-                card.appendChild(frequencyField);
-
-                const remove = document.createElement('button');
-                remove.setAttribute('is', 'emby-button');
-                remove.className = 'emby-button';
-                remove.textContent = 'Remove rule';
-                remove.addEventListener('click', () => { config.Rules.splice(index, 1); renderRules(); });
-                card.appendChild(remove);
-
-                const up = document.createElement('button');
-                up.setAttribute('is', 'emby-button');
-                up.className = 'emby-button';
-                up.textContent = 'Move up';
-                up.disabled = index === 0;
-                up.addEventListener('click', () => {
+                const up = button('Move up', () => {
                     const [r] = config.Rules.splice(index, 1);
                     config.Rules.splice(index - 1, 0, r);
                     renderRules();
                 });
-                card.appendChild(up);
+                up.disabled = index === 0;
+                body.appendChild(up);
+
+                body.appendChild(button('Remove rule', () => {
+                    config.Rules.splice(index, 1);
+                    renderRules();
+                }));
 
                 return card;
             };
 
             const renderTargetNode = (rule, node, refresh, updateSummary) => {
                 const wrap = document.createElement('div');
+                wrap.className = 'ir-treeNode';
                 wrap.style.paddingLeft = '1em';
 
                 if (node.Type === 'Movie') {
@@ -491,11 +759,10 @@
                 wrap.appendChild(checkbox(node.Name, seriesActive, on => {
                     if (on) {
                         rule.TargetItemIds = [...new Set([...rule.TargetItemIds, node.Id])];
-                        clearExclusions(rule, node);
                     } else {
                         rule.TargetItemIds = rule.TargetItemIds.filter(id => id !== node.Id);
-                        clearExclusions(rule, node);
                     }
+                    clearExclusions(rule, node);
                     refresh();
                 }));
 
@@ -559,16 +826,22 @@
                 if (!input.files || input.files.length === 0) return;
                 const fd = new FormData();
                 fd.append('file', input.files[0]);
+                Dashboard.showLoadingMsg();
                 fetch(api('/Assets'), {
                     method: 'POST',
                     headers: { 'X-Emby-Token': token() },
                     body: fd
-                }).then(() => { input.value = ''; load(); });
+                }).then(() => {
+                    input.value = '';
+                    Dashboard.showLoadingMsg();
+                    reloadAssets().then(() => Dashboard.hideLoadingMsg());
+                }).catch(() => Dashboard.hideLoadingMsg());
             };
 
             const save = () => {
                 config.MoviesOnly = document.querySelector('#moviesOnly').checked;
-                config.RepeatAfterMinutes = parseInt(document.querySelector('#repeatAfterMinutes').value, 10) || 180;
+                const minutes = parseInt(document.querySelector('#repeatAfterMinutes').value, 10);
+                config.RepeatAfterMinutes = Math.min(99999, Math.max(1, minutes || 180));
                 Dashboard.showLoadingMsg();
                 ApiClient.updatePluginConfiguration(pluginId, config).then(() => {
                     Dashboard.hideLoadingMsg();
@@ -576,14 +849,25 @@
                 });
             };
 
+            const stepMinutes = (delta) => {
+                const input = document.querySelector('#repeatAfterMinutes');
+                const current = parseInt(input.value, 10) || 0;
+                input.value = Math.min(99999, Math.max(1, current + delta));
+            };
+
+            document.querySelector('#introReplacerForm').addEventListener('submit', (e) => {
+                e.preventDefault();
+                save();
+            });
             document.querySelector('#addRuleBtn').addEventListener('click', () => {
                 config.Rules.push(newRule());
                 renderRules();
             });
-            document.querySelector('#uploadBtn').addEventListener('click', upload);
-            document.querySelector('#addVideoBtn').addEventListener('click', addLibraryVideo);
-            document.querySelector('#videoFilter').addEventListener('input', renderVideoSelect);
-            document.querySelector('#saveBtn').addEventListener('click', save);
+            document.querySelector('#uploadBtn').addEventListener('click', () => document.querySelector('#uploadFile').click());
+            document.querySelector('#uploadFile').addEventListener('change', upload);
+            document.querySelector('#pickVideoBtn').addEventListener('click', openVideoPicker);
+            document.querySelector('#minutesDown').addEventListener('click', () => stepMinutes(-1));
+            document.querySelector('#minutesUp').addEventListener('click', () => stepMinutes(1));
 
             load();
         })();

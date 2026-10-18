@@ -68,6 +68,16 @@ lets the client skip the item's own intro. Target: **Jellyfin 10.10.x**.
   `Jellyfin.Data.Enums`. `IntroInfo` is in `MediaBrowser.Controller.Library`.
 - Do **not** bundle Jellyfin/framework DLLs. `CopyLocalLockFileAssemblies=false` in
   the csproj keeps publish output to just our DLL; Jellyfin supplies the rest.
+- **The config page's custom elements must be built from HTML strings.** Jellyfin's
+  v0 custom-element polyfill upgrades a subtree when the document's MutationObserver
+  sees it inserted, so `document.createElement('input')` +
+  `setAttribute('is', 'emby-input')` never upgrades (and `emby-input`'s
+  `createdCallback` touches `parentNode`, which would throw). Do
+  `wrapper.innerHTML = '<input is="emby-input" label="…">'` and insert the result into
+  the page, as Jellyfin's own dashboards do. Same reason not to reach for
+  `emby-collapse`/`emby-radio`: those modules are only pulled in by lazy legacy
+  controller chunks (library browser, filter dialog), so they may not be registered on
+  the dashboard route — use `<details>` + local CSS instead.
 
 ## Environment quirks
 
@@ -110,7 +120,7 @@ docker compose -f docker/compose.yaml up -d                          # then rest
 - `Services/IntroSegmentHelper.cs` — applies `Replace`/`Prepend` to `Intro` media segments.
 - `Services/IntroSessionTracker.cs` — intro-repeat bookkeeping (wait-time + once-per-session); pure, unit-tested, no Jellyfin types.
 - `Api/IntroReplacerController.cs` — REST: `/IntroReplacer/Assets` (list/upload/delete), `/IntroReplacer/Assets/FromLibrary/{itemId}` (use an existing library video as an intro), `/Videos` (every video in every library, for that picker), `/Libraries`, `/Users`, `/Targets` (series/season/episode tree), `/Test/{itemId}`.
-- `Configuration/config.html` — dashboard page. Inline `<script>` (no external controller file); talks to the endpoints above and to Jellyfin's standard `get/updatePluginConfiguration`.
+- `Configuration/config.html` — dashboard page. Inline `<script>` (no external controller file); talks to the endpoints above and to Jellyfin's standard `get/updatePluginConfiguration`. Follows the vanilla Control Panel markup (`<form>` limited to 54em, `h1.pageTitle`, `h2.sectionTitle`, `inputContainer`/`checkboxContainer`/`checkboxList`, `raised` buttons, `raised button-submit block` Save); the library-video picker is a hand-built `.dialogContainer > .dialog.formDialog` modal — plugin pages **cannot** `require` `dialogHelper` (no `window.require`/`window.define` in 10.10).
 
 ## Conventions
 

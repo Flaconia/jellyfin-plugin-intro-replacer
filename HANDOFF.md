@@ -1,6 +1,6 @@
 # HANDOFF — Intro Replacer (Jellyfin plugin)
 
-Last updated: 2026-10-18 (session 5). Read this first; then `AGENTS.md` for the hard
+Last updated: 2026-10-18 (session 6). Read this first; then `AGENTS.md` for the hard
 constraints, then `README.md` for the user-facing summary.
 
 ## 1. What we are building
@@ -236,6 +236,38 @@ Tests are now 32 (`IntroSessionTrackerTests` adds 9).
 3. **Episode numbers in the target tree.** `TargetNodeDto` already carried `Index`;
    the checkbox label is now `"{Index}. {Name}"` for episodes.
 
+## 3e. Session 6 notes — config page re-styled as vanilla Control Panel
+
+1. **Look and layout.** Content lives in a `<form>` (the global
+   `form { max-width: 54em }` gives the "room on the right"), the page header is
+   `h1.pageTitle` (1.8em) and section headers are `h2.sectionTitle` (1.5em) — previously
+   a h2/h3 pair that read as one level. Fields use the vanilla blocks
+   (`inputContainer` + `label` attribute on `emby-input`, `checkboxContainer`
+   `-withDescription`, `checkboxList paperList`, `selectContainer`), and every text
+   button except Save is `raised` (grey/`#303030`, white text); Save is
+   `raised button-submit block`. The Save button moved back to `type="submit"` with a
+   `submit` handler that calls `preventDefault()`.
+2. **Minutes-to-wait stepper.** Narrow `type="number"` field (6em, `max=99999`) with the
+   native stacked spinner suppressed (`appearance: textfield` +
+   `::-webkit-*-spin-button`) and two flat `paper-icon-button-light` buttons
+   (`remove`/`add`) side by side next to it.
+3. **Library-video picker is a modal.** "Add a video from a library…" opens a
+   hand-built `.dialogContainer > .dialog.dialog-fixedSize.dialog-small.formDialog.paperList`
+   with `formDialogHeader` / `formDialogContent.smoothScrollY` / `formDialogFooter`, a
+   filter field and click-to-select `.listItem` rows grouped by library. Vanilla sizing
+   comes from `dialog-small` (60%×80% at ≥80em/≥45em, fullscreen otherwise) — note that
+   `.dialog` itself has **no** background in Jellyfin's CSS, hence the `paperList` class
+   on the dialog to get the theme surface. `dialogHelper` is unreachable from a plugin
+   page (no `window.require`), so the markup/backdrop/Escape handling is local.
+   `GET /Videos` now reports `Library` (one `ParentId` query per library) to group the
+   rows.
+4. **Uploading or deleting an intro no longer discards unsaved rule edits**: the page
+   re-reads `Assets` only (`reloadAssets()`) instead of re-running the whole `load()`.
+5. **jsdom smoke test** (`/tmp/opencode/uitest/smoke.js`, throwaway) drives the page
+   with stubbed `ApiClient`/`Dashboard` and asserts the whole UI build, the rule
+   interactions, the save submit and the picker modal. It also documents that jsdom
+   leaves `is="emby-*"` un-upgraded, i.e. the page must work with plain elements too.
+
 ## 4. Automatic intro detection — status
 
 - **Chapters: implemented** (`IntroChapterDetector`) and unit-tested. It is read-only
@@ -276,7 +308,9 @@ route `[controller]` → `/IntroReplacer/...`):
 - `POST /Assets/FromLibrary/{itemId}` — register an existing library video as an
   intro (idempotent; never touches the file).
 - `GET /Videos` — every video file in every library, for the "add a video already on
-  the server" picker.
+  the server" picker. Runs one query per library (`InternalItemsQuery.ParentId`) so the
+  library name comes for free instead of walking each item's ancestor chain; the DTO
+  carries `Library` and the picker groups by it.
 - `GET /Libraries`, `GET /Users`, `GET /Targets` (series → seasons → episodes tree).
 - `POST /Test/{itemId}?userId=` — evaluate rules without playing.
 
@@ -304,6 +338,17 @@ Config is saved through Jellyfin's standard `get/updatePluginConfiguration`.
   bookkeeping (`Plugin.cs` wires `ISessionManager.SessionEnded` into it).
 - `Api/IntroReplacerController.cs` — REST endpoints.
 - `Configuration/config.html` — dashboard page (inline JS, no external controller).
+  Follows the vanilla Control Panel markup: a `<form>` (which the global
+  `form { max-width: 54em }` limits), `h1.pageTitle` + `h2.sectionTitle` headers,
+  `inputContainer`/`checkboxContainer`/`checkboxList` blocks, `raised` buttons and a
+  `raised button-submit block` Save. The "add a video from a library" picker is a
+  hand-built modal (`.dialogContainer > .dialog.formDialog.paperList`) because plugin
+  pages cannot `require` `dialogHelper` (`window.require`/`window.define` do not
+  exist in 10.10). Custom elements (`is="emby-input|emby-checkbox|emby-select|
+  emby-button|paper-icon-button-light"`) **must be built from HTML strings and
+  inserted into the document** — the v0 polyfill upgrades on MutationObserver, so
+  `document.createElement` + `setAttribute('is', …)` never upgrades (and would crash
+  `emby-input`, whose `createdCallback` touches `parentNode`).
 - `Jellyfin.Plugin.IntroReplacer.Tests/` — `RuleEngineTests` (15),
   `IntroChapterDetectorTests` (8), `IntroSessionTrackerTests` (8 methods / 9 cases)
   → 32 passing.
