@@ -24,6 +24,11 @@ Local Intros plugin).
   skip the original intro. Existing segments (e.g. from Intro Skipper) are kept.
   Automatic audio-based detection is **not** implemented — install Intro Skipper for
   items without chapters.
+- **Skipping is decided by the client, not the server.** By default Jellyfin shows a
+  **Skip Intro button** (for ~8 s) while the segment plays; it never seeks by itself.
+  For hands-free skipping, each client sets
+  `Playback → Media Segment Actions → Intro Segments → Skip` (a per-client/browser
+  preference — Jellyfin 10.10 has no server-side equivalent).
 
 There is **no** per-item "3-dots" menu: Jellyfin has no cross-client plugin API for
 that. Assignment happens on the plugin's dashboard page (`Dashboard → Plugins → Intro Replacer`).

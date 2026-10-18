@@ -87,8 +87,26 @@ in DI.
 
 Verified live for Pokémon S01E01: `GET /MediaSegments/{ep}` returns
 `{Type: Intro, StartTicks: 0, EndTicks: 892500000}` (0 → 89.25 s, the "Sigla
-d'apertura" chapter) and the `MediaSource.HasSegments` flag is `true`. The web client
-default action for `Intro` segments is `AskToSkip` → a "Skip Intro" prompt appears.
+d'apertura" chapter) and the `MediaSource.HasSegments` flag is `true`.
+
+**The skip itself is client-side.** Jellyfin 10.10 has **no** server-side per-user
+setting for what to do with a segment (verified: no `SegmentAction` in the server
+model). The web client's `mediaSegmentManager.ts` acts on a per-type action from
+browser `localStorage` (`segmentTypeAction__Intro`), defaulting to `AskToSkip`; that
+shows a **Skip Intro button for 8 s** (`components/playback/skipsegment.ts`) and
+never seeks on its own. For hands-free skipping the user sets
+`Playback → Media Segment Actions → Intro Segments → Skip` (`MediaSegmentAction.Skip`
+→ `skipSegment()` seeks to `EndTicks`). The plugin cannot set this without JS
+injection, which is out of scope by the user's choice. `playbackstart` re-fires for
+every item, so the main item's segment is picked up after the pre-roll — the mechanism
+is sound.
+
+Segments are populated two ways, both via the same `IMediaSegmentProvider`:
+1. on demand in `ApplyPlacementAsync` when the intro is served (covers replay), and
+2. by Jellyfin's built-in **"Media Segment Scan"** task
+   (`MediaSegmentExtractionTask`, runs every 12 h) — confirmed working: it logged
+   `Media Segment provider Intro Replacer found 1 for …` across the Pokémon episodes.
+   Run it once after installing (Dashboard → Scheduled Tasks) to populate immediately.
 
 ### 2c. Client support matrix (important)
 
@@ -114,6 +132,23 @@ JS, by the user's explicit choice, so episode support is limited to web-based cl
 2. **Path-only intros silently dropped by Jellyfin.** See §2a. Fix: hidden library +
    `ItemId`.
 3. **Media segments invisible to clients.** See §2b. Fix: `PluginServiceRegistrator`.
+
+## 3b. Session 3 notes
+
+- The reported "intro replays from the start" was **not** a server bug: B plays and A
+  carries a correct `Intro` segment. It is the client's default `AskToSkip` behaviour
+  (8 s button, no auto-seek). DECISION: keep the standard behaviour and document the
+  per-client auto-skip setting (`Intro Segments → Skip`); no JS injection. A config-page
+  hint was added next to the `Replace`/`Prepend` radio.
+- **Login gotcha:** `POST /Users/AuthenticateByName` binds the password to the JSON
+  field **`Pw`**, not `Password`. Sending `Password` yields `401 Invalid username or
+  password`, which is very misleading when debugging. Use
+  `-d '{"Username":"root","Pw":"root"}'`.
+- Credentials now `root` / `root` (confirmed working). A normal user `tester`
+  (`tester` / `tester`) was created via the API for multi-user testing — remove it if
+  not wanted.
+- A temporary admin API key was inserted to bootstrap and then **deleted**; no keys
+  remain (`SELECT count(*) FROM ApiKeys` → 0).
 
 ## 4. Automatic intro detection — status
 
@@ -209,9 +244,10 @@ Restart the container after every deploy or the plugin won't reload.
 - DB: `docker/jellyfin/config/data/jellyfin.db` (SQLite; owned by root, so from the
   host use a throwaway container to read/write it, e.g.
   `docker run --rm -v "$PWD/docker/jellyfin/config:/config" -v script.py:/s.py python:3-alpine python /s.py`).
-- **Credentials:** `root` + `admin` was **rejected (401)** when this session tried it.
-  The user provided those credentials, so either the password differs from memory or it
-  was changed. Confirm with the user before relying on API access.
+- **Credentials:** `root` / `root` (works). Remember the login body uses `Pw`, not
+  `Password` (see §3b). Since the DB is root-owned, use a throwaway container to
+  read/write it, e.g.
+  `docker run --rm -v "$PWD/docker/jellyfin/config:/config" -v script.py:/s.py python:3-alpine python /s.py`.
 
 ### Current test data (Pokémon)
 
@@ -242,13 +278,15 @@ Restart the container after every deploy or the plugin won't reload.
 
 ## 10. Next steps / open items
 
-1. Confirm the login for the test server (see §8) so future sessions can drive the API.
+1. **Confirm in the browser** (session 3 decision): play a Pokémon episode; B should
+   play, then A should start at 0 with a "Skip Intro" button. To make it hands-free,
+   each client sets `Playback → Media Segment Actions → Intro Segments → Skip`.
 2. Optional: implement audio-based intro detection (or document the Intro Skipper
    dependency more prominently in the UI).
 3. Optional: make `GET /Targets` lazy (it currently builds the whole
    series/season/episode tree in one response; fine for small libraries).
 4. Optional: only re-apply user hiding when the library was actually (re)created.
-5. `manifest.json` still has empty `sourceUrl`/`checksum` — fill before publishing.
-6. Committed at the end of session 2 once playback worked end-to-end server-side
-   (see `git log`). The user still needs to confirm in the browser: open the plugin
-   page, Save once (the file name should survive now), then play a Pokémon episode.
+5. Optional: run/trigger "Media Segment Scan" right after config changes so segments
+   never depend on a later scheduled run.
+6. `manifest.json` still has empty `sourceUrl`/`checksum` — fill before publishing.
+7. `tester` user (`tester`/`tester`) exists for multi-user tests — keep or delete.

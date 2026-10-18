@@ -317,7 +317,7 @@
                         v => rule.Placement = v));
                 const placementHint = document.createElement('div');
                 placementHint.className = 'fieldDescription';
-                placementHint.textContent = 'Replace keeps the detected intro markers so the client skips the original. Prepend removes those markers.';
+                placementHint.textContent = 'Replace adds an "Intro" segment so the client can skip the original intro (it shows a Skip button). For hands-free skipping, set Playback -> Media Segment Actions -> Intro Segments -> Skip in the user\'s client settings. Prepend removes those markers so the item plays from the start.';
                 placementField.appendChild(placementHint);
                 card.appendChild(placementField);
 

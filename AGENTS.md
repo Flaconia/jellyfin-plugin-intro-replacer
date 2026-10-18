@@ -37,6 +37,13 @@ lets the client skip the item's own intro. Target: **Jellyfin 10.10.x**.
   segment exists (keeps an existing one, else derives it from chapters) so the client
   skips the original intro; `IntroPlacement.Prepend` deletes those segments so the item
   plays from the start. See `IntroProvider` / `IntroSegmentHelper`.
+- **Skipping is client-side, not server-side.** Jellyfin 10.10 has no server-side
+  per-user "what to do with a segment" setting. The web client reads a per-type action
+  from browser `localStorage` (default `AskToSkip` → an 8 s "Skip Intro" button; it
+  never auto-seeks). Auto-skip requires the user to set `Intro Segments → Skip` on each
+  client. Do not try to set that from the server (only JS injection could, which is out
+  of scope). Segments are populated on demand and by the built-in "Media Segment Scan"
+  task (our `IMediaSegmentProvider` feeds it).
 - **Chapter reading.** Use `IItemRepository.GetChapters(item)`
   (`MediaBrowser.Controller.Persistence`, DI singleton). `IChapterManager` only saves.
   `ChapterInfo` has only `StartPositionTicks` — the end comes from the next chapter or
