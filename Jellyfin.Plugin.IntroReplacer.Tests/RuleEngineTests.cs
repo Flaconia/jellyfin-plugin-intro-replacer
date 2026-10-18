@@ -22,8 +22,8 @@ public class RuleEngineTests
         {
             Assets = new List<IntroAsset>
             {
-                new() { Id = AssetA, Name = "A", FileName = "a.mp4", Enabled = true },
-                new() { Id = AssetB, Name = "B", FileName = "b.mp4", Enabled = true }
+                new() { Id = AssetA, Name = "A", FileName = "a.mp4" },
+                new() { Id = AssetB, Name = "B", FileName = "b.mp4" }
             },
             Rules = new List<IntroRule>(rules)
         };
@@ -191,12 +191,11 @@ public class RuleEngineTests
     }
 
     [Fact]
-    public void DisabledAssetsAreNotSelected()
+    public void UnknownAssetIdsAreIgnored()
     {
-        var config = Config(new IntroRule { AssetIds = { AssetA }, PlaybackMode = IntroPlaybackMode.SequentialAll });
-        config.Assets[0].Enabled = false;
+        var rule = new IntroRule { AssetIds = { Guid.NewGuid() }, PlaybackMode = IntroPlaybackMode.SequentialAll };
 
-        var selection = RuleEngine.Select(config, Context(), new Random(1));
+        var selection = RuleEngine.Select(Config(rule), Context(), new Random(1));
 
         Assert.Null(selection);
     }

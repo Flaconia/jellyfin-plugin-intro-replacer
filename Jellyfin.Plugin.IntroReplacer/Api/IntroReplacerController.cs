@@ -65,7 +65,6 @@ public class IntroReplacerController : ControllerBase
         var result = Plugin.Configuration.Assets.Select(a => new IntroAssetDto(
             a.Id,
             a.Name,
-            a.Enabled,
             AssetExists(a),
             a.LibraryItemId == Guid.Empty ? "Uploaded" : "Library"));
 
@@ -105,8 +104,7 @@ public class IntroReplacerController : ControllerBase
         {
             Id = Guid.NewGuid(),
             Name = Path.GetFileNameWithoutExtension(file.FileName),
-            FileName = storedName,
-            Enabled = true
+            FileName = storedName
         };
 
         Plugin.Configuration.Assets.Add(asset);
@@ -117,7 +115,7 @@ public class IntroReplacerController : ControllerBase
         await Plugin.IntroLibrary.EnsureAsync().ConfigureAwait(false);
 
         _logger.LogInformation("Uploaded intro asset {Name} ({File})", asset.Name, storedName);
-        return Ok(new IntroAssetDto(asset.Id, asset.Name, asset.Enabled, true, "Uploaded"));
+        return Ok(new IntroAssetDto(asset.Id, asset.Name, true, "Uploaded"));
     }
 
     /// <summary>
@@ -146,22 +144,21 @@ public class IntroReplacerController : ControllerBase
         var existing = Plugin.Configuration.Assets.FirstOrDefault(a => a.LibraryItemId == itemId);
         if (existing is not null)
         {
-            return Ok(new IntroAssetDto(existing.Id, existing.Name, existing.Enabled, true, "Library"));
+            return Ok(new IntroAssetDto(existing.Id, existing.Name, true, "Library"));
         }
 
         var asset = new IntroAsset
         {
             Id = Guid.NewGuid(),
             Name = Describe(item),
-            LibraryItemId = itemId,
-            Enabled = true
+            LibraryItemId = itemId
         };
 
         Plugin.Configuration.Assets.Add(asset);
         Plugin.SaveConfiguration();
 
         _logger.LogInformation("Registered library video {Name} ({ItemId}) as an intro", asset.Name, itemId);
-        return Ok(new IntroAssetDto(asset.Id, asset.Name, asset.Enabled, true, "Library"));
+        return Ok(new IntroAssetDto(asset.Id, asset.Name, true, "Library"));
     }
 
     /// <summary>
@@ -402,10 +399,9 @@ public class IntroReplacerController : ControllerBase
 /// <summary>Asset representation returned to the config page.</summary>
 /// <param name="Id">Asset id.</param>
 /// <param name="Name">Display name.</param>
-/// <param name="Enabled">Whether enabled.</param>
 /// <param name="Exists">Whether the source file/item still exists.</param>
 /// <param name="Source">Where the intro comes from: <c>Uploaded</c> or <c>Library</c>.</param>
-public record IntroAssetDto(Guid Id, string Name, bool Enabled, bool Exists, string Source);
+public record IntroAssetDto(Guid Id, string Name, bool Exists, string Source);
 
 /// <summary>A library video that can be used as an intro.</summary>
 /// <param name="Id">Item id.</param>

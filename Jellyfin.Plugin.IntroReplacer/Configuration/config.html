@@ -93,9 +93,66 @@
             padding: 0.2em 0;
         }
 
-        .ir-assetRow > .emby-checkbox-label {
-            width: auto;
+        .ir-assetRow > .ir-assetName {
             flex-grow: 1;
+            margin-right: 0.5em;
+            overflow-wrap: anywhere;
+        }
+
+        /* Help "?" with a hover tooltip, mirroring the icon buttons Jellyfin
+           places next to inputs (e.g. the path magnifiers in General). */
+        .ir-tip {
+            position: relative;
+            display: inline-flex;
+            align-items: center;
+            flex: 0 0 auto;
+        }
+
+        .ir-tip > .ir-tipButton {
+            margin: 0;
+        }
+
+        .ir-tipBubble {
+            position: absolute;
+            top: 100%;
+            right: 0;
+            z-index: 20;
+            width: 22em;
+            max-width: 70vw;
+            padding: 0.6em 0.8em;
+            border-radius: 0.2em;
+            background: #303030;
+            color: #fff;
+            font-size: 0.85em;
+            line-height: 1.4;
+            text-align: left;
+            white-space: normal;
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.55);
+            display: none;
+        }
+
+        .ir-tip:hover > .ir-tipBubble,
+        .ir-tip:focus-within > .ir-tipBubble {
+            display: block;
+        }
+
+        /* A field plus its trailing help icon, like the vanilla magnifier layout. */
+        .ir-tipField {
+            display: flex;
+            align-items: center;
+            margin-bottom: 1.8em;
+        }
+
+        .ir-tipField > .selectContainer,
+        .ir-tipField > .inputContainer {
+            flex: 1 1 auto;
+            min-width: 0;
+            margin-bottom: 0;
+        }
+
+        .checkboxContainer > .emby-checkbox-label {
+            flex: 1 1 auto;
+            width: auto;
         }
 
         .ir-pickRow {
@@ -127,15 +184,11 @@
                 <div class="verticalSection">
                     <h2 class="sectionTitle">Settings</h2>
 
-                    <div class="checkboxContainer checkboxContainer-withDescription">
+                    <div class="checkboxContainer" id="moviesOnlyRow">
                         <label>
                             <input type="checkbox" is="emby-checkbox" id="moviesOnly" />
                             <span>Only play intros for movies</span>
                         </label>
-                        <div class="fieldDescription checkboxFieldDescription">
-                            Turning this on skips episodes and seasons. Some TV and mobile apps do not
-                            ask for intros on episodes anyway, while movies work everywhere.
-                        </div>
                     </div>
                 </div>
 
@@ -264,6 +317,14 @@
                 return list;
             };
 
+            // A plain list panel (theme surface, no checkbox-specific styling).
+            const paperPanel = () => {
+                const panel = document.createElement('div');
+                panel.className = 'paperList';
+                panel.style.padding = '.5em 1em';
+                return panel;
+            };
+
             const button = (text, onClick) => {
                 const btn = elem('<button type="button" is="emby-button" class="raised"><span></span></button>');
                 btn.querySelector('span').textContent = text;
@@ -293,7 +354,7 @@
                 return wrap;
             };
 
-            const selectField = (labelText, options, value, onChange) => {
+            const selectField = (labelText, options, value, onChange, tipText) => {
                 const wrap = frag(
                     '<div class="selectContainer">'
                     + '<select is="emby-select" label="' + escapeHtml(labelText) + '"></select>'
@@ -307,7 +368,18 @@
                     select.appendChild(option);
                 });
                 select.addEventListener('change', () => onChange(select.value));
-                return wrap;
+
+                if (!tipText) {
+                    return wrap;
+                }
+
+                // Put the "?" beside the field (right), like the vanilla magnifier
+                // buttons next to the path inputs.
+                const row = document.createElement('div');
+                row.className = 'ir-tipField';
+                row.appendChild(wrap);
+                row.appendChild(infoTip(tipText));
+                return row;
             };
 
             const hint = (text) => {
@@ -315,6 +387,21 @@
                 div.className = 'fieldDescription';
                 div.textContent = text;
                 return div;
+            };
+
+            // A circled "?" whose explanation only shows while hovering (or focusing)
+            // the symbol, so the form stays clean.
+            const infoTip = (text) => {
+                const wrap = elem(
+                    '<div class="ir-tip">'
+                    + '<button type="button" is="paper-icon-button-light" class="ir-tipButton" '
+                    + 'aria-label="More information">'
+                    + '<span class="material-icons help_outline" aria-hidden="true"></span>'
+                    + '</button>'
+                    + '<div class="ir-tipBubble" role="tooltip"></div>'
+                    + '</div>');
+                wrap.querySelector('.ir-tipBubble').textContent = text;
+                return wrap;
             };
 
             // Minutes-to-wait stepper: a narrow field with two flat (transparent)
@@ -416,12 +503,17 @@
                     return;
                 }
 
-                const list = checkboxList();
+                const list = paperPanel();
                 config.Assets.forEach(asset => {
                     const row = document.createElement('div');
                     row.className = 'ir-assetRow';
-                    row.appendChild(checkbox(describeAsset(asset), asset.Enabled, v => { asset.Enabled = v; }));
-                    row.appendChild(button('Delete', () => deleteAsset(asset.Id)));
+
+                    const name = document.createElement('span');
+                    name.className = 'ir-assetName';
+                    name.textContent = describeAsset(asset);
+                    row.appendChild(name);
+
+                    row.appendChild(button('Remove', () => deleteAsset(asset.Id)));
                     list.appendChild(row);
                 });
                 host.appendChild(list);
@@ -662,8 +754,8 @@
                     [{ value: 'Replace', label: 'Replace it (the client can skip the original intro)' },
                      { value: 'Prepend', label: 'Prepend (play the item from the beginning)' }],
                     rule.Placement,
-                    v => rule.Placement = v);
-                placement.appendChild(hint('Replace adds an "Intro" segment so the client can skip the original intro (it shows a Skip button). For hands-free skipping, set Playback -> Media Segment Actions -> Intro Segments -> Skip in the client. Prepend removes those markers so the item plays from the start.'));
+                    v => rule.Placement = v,
+                    'Replace adds an "Intro" segment so the client can skip the original intro (it shows a Skip button). For hands-free skipping, set Playback -> Media Segment Actions -> Intro Segments -> Skip in the client. Prepend removes those markers so the item plays from the start.');
                 body.appendChild(placement);
 
                 // The wait time is per rule; only relevant for the "wait time" frequency.
@@ -676,8 +768,8 @@
                      { value: 'OncePerInterval', label: 'Only after the wait time has passed' },
                      { value: 'OncePerSession', label: 'Once per session (until you disconnect)' }],
                     rule.Frequency,
-                    v => { rule.Frequency = v; syncMinutes(); });
-                frequency.appendChild(hint('"Every time" plays before the title you start; if you start a list, it plays before the first title only. "Only after the wait time" replays it once the minutes set just below have passed. "Once per session" replays it after you close the app or sign out.'));
+                    v => { rule.Frequency = v; syncMinutes(); },
+                    '"Every time" plays before the title you start; if you start a list, it plays before the first title only. "Only after the wait time" replays it once the minutes set just below have passed. "Once per session" replays it after you close the app or sign out.');
                 body.appendChild(frequency);
                 syncMinutes();
                 body.appendChild(minutes);
@@ -939,6 +1031,10 @@
             document.querySelector('#uploadBtn').addEventListener('click', () => document.querySelector('#uploadFile').click());
             document.querySelector('#uploadFile').addEventListener('change', upload);
             document.querySelector('#pickVideoBtn').addEventListener('click', openVideoPicker);
+
+            document.querySelector('#moviesOnlyRow').appendChild(infoTip(
+                'Turning this on skips episodes and seasons. Some TV and mobile apps do not '
+                + 'ask for intros on episodes anyway, while movies work everywhere.'));
 
             load();
         })();

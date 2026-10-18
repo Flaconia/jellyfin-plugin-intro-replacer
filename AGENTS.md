@@ -78,7 +78,9 @@ lets the client skip the item's own intro. Target: **Jellyfin 10.10.x**.
   the page, as Jellyfin's own dashboards do. Same reason not to reach for
   `emby-collapse`/`emby-radio`: those modules are only pulled in by lazy legacy
   controller chunks (library browser, filter dialog), so they may not be registered on
-  the dashboard route — use `<details>` + local CSS instead.
+  the dashboard route — use `<details>` + local CSS instead. There is likewise no
+  reachable tooltip component, so the field help uses a local hover bubble
+  (`.ir-tip`/`.ir-tipBubble` in `config.html`) with a `help_outline` icon button.
 
 ## Environment quirks
 
@@ -138,7 +140,8 @@ docker compose -f docker/compose.yaml up -d                          # then rest
   (`LibraryItemId`, resolved with `ILibraryManager.GetItemById`). Always branch on
   `LibraryItemId != Guid.Empty` before touching the asset store: a library asset has an
   empty `FileName`, and deleting it must only unregister it — never delete the user's
-  media.
+  media. There is **no** global enable/disable flag on an asset: the admin list is
+  read-only (name + Remove), and each rule picks the intros it uses via `AssetIds`.
 - The hidden `Intro Replacer` library and its intro clips must never show up in the
   config UI. `GET /Targets` and `GET /Videos` filter it out using
   `IntroLibraryManager.GetLibraryItemId()` (one query per virtual folder, skipping the

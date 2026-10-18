@@ -35,10 +35,7 @@ public static class RuleEngine
     /// <returns>The selection, or <c>null</c> when no rule matches.</returns>
     public static IntroSelection? Select(PluginConfiguration configuration, RuleContext context, Random random)
     {
-        var enabledAssets = configuration.Assets
-            .Where(a => a.Enabled)
-            .Select(a => a.Id)
-            .ToHashSet();
+        var knownAssets = configuration.Assets.Select(a => a.Id).ToHashSet();
 
         foreach (var rule in configuration.Rules)
         {
@@ -47,9 +44,10 @@ public static class RuleEngine
                 continue;
             }
 
+            var candidates = rule.AssetIds.Where(knownAssets.Contains).ToList();
             var assetIds = rule.PlaybackMode == IntroPlaybackMode.SequentialAll
-                ? rule.AssetIds.Where(enabledAssets.Contains).ToList()
-                : PickOne(rule.AssetIds.Where(enabledAssets.Contains).ToList(), random);
+                ? candidates
+                : PickOne(candidates, random);
 
             if (assetIds.Count == 0)
             {

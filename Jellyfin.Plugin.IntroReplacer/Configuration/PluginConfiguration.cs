@@ -49,9 +49,6 @@ public class IntroAsset
     /// <see cref="Guid.Empty"/> for a file uploaded into the plugin's folder.
     /// </summary>
     public Guid LibraryItemId { get; set; }
-
-    /// <summary>Gets or sets a value indicating whether the asset can be selected.</summary>
-    public bool Enabled { get; set; } = true;
 }
 
 /// <summary>

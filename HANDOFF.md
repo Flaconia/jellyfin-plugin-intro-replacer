@@ -1,6 +1,6 @@
 # HANDOFF — Intro Replacer (Jellyfin plugin)
 
-Last updated: 2026-10-18 (session 7). Read this first; then `AGENTS.md` for the hard
+Last updated: 2026-10-18 (session 8). Read this first; then `AGENTS.md` for the hard
 constraints, then `README.md` for the user-facing summary.
 
 ## 1. What we are building
@@ -291,6 +291,23 @@ Tests are now 32 (`IntroSessionTrackerTests` adds 9).
    active/excluded logic the engine uses, so it is exact.
 4. **"Active for users" moved up**, directly under the rule's Name field.
 
+## 3g. Session 8 notes — help tooltips, lean intro list
+
+1. **Help text is now on hover.** The three always-visible hints (the "Only play intros
+   for movies" description, the Placement explanation, the Frequency explanation) were
+   replaced by a circled `?` (`material-icons help_outline` inside a flat
+   `paper-icon-button-light`) that sits to the right of the field and reveals the text on
+   hover/focus. Implemented locally (`.ir-tip` + `.ir-tipBubble`, `:hover`/`:focus-within`)
+   because plugin pages cannot reach a tooltip module; the layout mirrors the vanilla
+   magnifier next to the path inputs (`.ir-tipField` flex row: field grows, icon at the
+   right). The other descriptions (Intro files blurb, target-tree hint) stay visible.
+2. **Intro files list is read-only.** The global list no longer has checkboxes — each row
+   is just the file name plus a **Remove** button (was "Delete"). The rule's
+   "Intros (pick one or more)" list keeps its checkboxes. Consequence: `IntroAsset.Enabled`
+   was removed (model, `IntroAssetDto`, `RuleEngine`), so an asset can no longer be left
+   silently disabled with no UI to re-enable it; selection now only checks that the asset
+   id is still registered (`UnknownAssetIdsAreIgnored` test).
+
 ## 4. Automatic intro detection — status
 
 - **Chapters: implemented** (`IntroChapterDetector`) and unit-tested. It is read-only
@@ -312,7 +329,7 @@ types):
 - `PluginConfiguration`: `Assets`, `Rules`, `MoviesOnly`.
 - `IntroAsset`: `Id`, `Name`, `FileName` (the stored file under the intros folder, empty
   for library assets), `LibraryItemId` (an existing library video, `Guid.Empty` for
-  uploads), `Enabled`.
+  uploads).
 - `IntroRule`: `Id`, `Name`, `Enabled`, `LibraryIds` (empty = all libraries),
   `UserIds`, `TargetItemIds`
   (active series/movie ids; empty = all), `ExcludedItemIds` (deactivated season/episode
