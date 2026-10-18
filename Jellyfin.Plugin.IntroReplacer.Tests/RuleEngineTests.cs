@@ -176,6 +176,21 @@ public class RuleEngineTests
     }
 
     [Fact]
+    public void RuleWaitTimeIsCarriedThrough()
+    {
+        var rule = new IntroRule
+        {
+            AssetIds = { AssetA },
+            Frequency = IntroFrequency.OncePerInterval,
+            RepeatAfterMinutes = 42
+        };
+
+        var selection = RuleEngine.Select(Config(rule), Context(), new Random(1));
+
+        Assert.Equal(42, selection!.RepeatAfterMinutes);
+    }
+
+    [Fact]
     public void DisabledAssetsAreNotSelected()
     {
         var config = Config(new IntroRule { AssetIds = { AssetA }, PlaybackMode = IntroPlaybackMode.SequentialAll });

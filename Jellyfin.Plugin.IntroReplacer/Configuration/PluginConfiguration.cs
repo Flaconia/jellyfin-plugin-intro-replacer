@@ -25,12 +25,6 @@ public class PluginConfiguration : BasePluginConfiguration
     /// Gets or sets a value indicating whether intros are limited to movies.
     /// </summary>
     public bool MoviesOnly { get; set; }
-
-    /// <summary>
-    /// Gets or sets how long (in minutes) the intro waits before it may play again.
-    /// Used by <see cref="IntroFrequency.OncePerInterval"/>.
-    /// </summary>
-    public int RepeatAfterMinutes { get; set; } = 180;
 }
 
 /// <summary>
@@ -126,6 +120,12 @@ public class IntroRule
 
     /// <summary>Gets or sets how often the custom intro plays.</summary>
     public IntroFrequency Frequency { get; set; } = IntroFrequency.EveryTime;
+
+    /// <summary>
+    /// Gets or sets how long (in minutes) the intro waits before it may play again.
+    /// Only used by <see cref="IntroFrequency.OncePerInterval"/>.
+    /// </summary>
+    public int RepeatAfterMinutes { get; set; } = 180;
 }
 
 /// <summary>How intros are selected from a rule's asset list.</summary>
@@ -158,8 +158,8 @@ public enum IntroFrequency
     EveryTime,
 
     /// <summary>
-    /// Play again only once the configured wait time has passed
-    /// (<see cref="PluginConfiguration.RepeatAfterMinutes"/>).
+    /// Play again only once the rule's configured wait time has passed
+    /// (<see cref="IntroRule.RepeatAfterMinutes"/>).
     /// </summary>
     OncePerInterval,
 

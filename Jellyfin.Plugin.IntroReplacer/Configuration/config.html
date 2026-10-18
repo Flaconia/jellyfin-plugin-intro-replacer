@@ -137,22 +137,6 @@
                             ask for intros on episodes anyway, while movies work everywhere.
                         </div>
                     </div>
-
-                    <div class="inputContainer">
-                        <div class="ir-stepper">
-                            <input type="number" is="emby-input" id="repeatAfterMinutes" min="1" max="99999"
-                                   label="Time to wait before the intro plays again (minutes)" />
-                            <button type="button" is="paper-icon-button-light" id="minutesDown" title="One minute less">
-                                <span class="material-icons remove" aria-hidden="true"></span>
-                            </button>
-                            <button type="button" is="paper-icon-button-light" id="minutesUp" title="One minute more">
-                                <span class="material-icons add" aria-hidden="true"></span>
-                            </button>
-                        </div>
-                        <div class="fieldDescription">
-                            Used by the "Only after the wait time" frequency below.
-                        </div>
-                    </div>
                 </div>
 
                 <div class="verticalSection">
@@ -203,7 +187,6 @@
         (() => {
             const pluginId = '07e08043-224d-4228-964f-02242635344f';
             let config = null;
-            let libraries = [];
             let users = [];
             let targets = [];
             let videos = [];
@@ -253,11 +236,16 @@
                 AssetIds: [],
                 PlaybackMode: 'RandomOne',
                 Placement: 'Replace',
-                Frequency: 'EveryTime'
+                Frequency: 'EveryTime',
+                RepeatAfterMinutes: 180
             });
 
             const csv = (arr) => (arr || []).join(', ');
             const parseCsv = (value) => value.split(',').map(s => s.trim()).filter(s => s.length > 0);
+
+            // An empty library selection means "all libraries".
+            const libraryInScope = (rule, libraryId) =>
+                rule.LibraryIds.length === 0 || rule.LibraryIds.includes(libraryId);
 
             // ---------- generic form controls ----------
             const checkbox = (labelText, checked, onChange) => {
@@ -329,12 +317,46 @@
                 return div;
             };
 
+            // Minutes-to-wait stepper: a narrow field with two flat (transparent)
+            // buttons, replacing the native stacked spinner. Reads/writes the rule.
+            const minutesStepper = (rule) => {
+                const wrap = elem(
+                    '<div class="inputContainer">'
+                    + '<div class="ir-stepper">'
+                    + '<input type="number" is="emby-input" min="1" max="99999" '
+                    + 'label="Time to wait before the intro plays again (minutes)" />'
+                    + '<button type="button" is="paper-icon-button-light" title="One minute less">'
+                    + '<span class="material-icons remove" aria-hidden="true"></span></button>'
+                    + '<button type="button" is="paper-icon-button-light" title="One minute more">'
+                    + '<span class="material-icons add" aria-hidden="true"></span></button>'
+                    + '</div>'
+                    + '</div>');
+
+                const input = wrap.querySelector('input');
+                const clamp = (value) => Math.min(99999, Math.max(1, value || 180));
+                input.value = clamp(rule.RepeatAfterMinutes);
+                rule.RepeatAfterMinutes = parseInt(input.value, 10);
+
+                const step = (delta) => {
+                    input.value = clamp((parseInt(input.value, 10) || 0) + delta);
+                    rule.RepeatAfterMinutes = parseInt(input.value, 10);
+                };
+                const buttons = wrap.querySelectorAll('button');
+                buttons[0].addEventListener('click', () => step(-1));
+                buttons[1].addEventListener('click', () => step(1));
+                input.addEventListener('input', () => {
+                    const value = parseInt(input.value, 10);
+                    if (!isNaN(value)) rule.RepeatAfterMinutes = clamp(value);
+                });
+
+                return wrap;
+            };
+
             // ---------- load ----------
             const load = async () => {
                 Dashboard.showLoadingMsg();
-                const [cfg, libs, usrs, tree, assets, vids] = await Promise.all([
+                const [cfg, usrs, tree, assets, vids] = await Promise.all([
                     ApiClient.getPluginConfiguration(pluginId),
-                    ApiClient.getJSON(api('/Libraries')),
                     ApiClient.getJSON(api('/Users')),
                     ApiClient.getJSON(api('/Targets')),
                     ApiClient.getJSON(api('/Assets')),
@@ -348,7 +370,6 @@
                 config.Rules.forEach(r => {
                     if (!r.Id || r.Id === '00000000-0000-0000-0000-000000000000') r.Id = guid();
                 });
-                libraries = libs || [];
                 users = usrs || [];
                 targets = tree || [];
                 videos = vids || [];
@@ -356,7 +377,6 @@
                 (assets || []).forEach(a => { assetExists[a.Id] = a.Exists; });
 
                 document.querySelector('#moviesOnly').checked = !!config.MoviesOnly;
-                document.querySelector('#repeatAfterMinutes').value = config.RepeatAfterMinutes || 180;
                 renderAssets();
                 renderRules();
                 Dashboard.hideLoadingMsg();
@@ -604,6 +624,20 @@
 
                 body.appendChild(textField('Name', rule.Name, v => { rule.Name = v; updateTitle(); }));
 
+                // users
+                const userWrap = checkboxList();
+                users.forEach(u => {
+                    userWrap.appendChild(checkbox(u.Name, rule.UserIds.includes(u.Id), on => {
+                        rule.UserIds = on
+                            ? [...new Set([...rule.UserIds, u.Id])]
+                            : rule.UserIds.filter(id => id !== u.Id);
+                    }));
+                });
+                if (users.length === 0) {
+                    userWrap.appendChild(elem('<div class="fieldDescription">No users found.</div>'));
+                }
+                body.appendChild(field('Active for users (empty = all)', userWrap));
+
                 // intros
                 const assetWrap = checkboxList();
                 config.Assets.forEach(asset => {
@@ -632,42 +666,21 @@
                 placement.appendChild(hint('Replace adds an "Intro" segment so the client can skip the original intro (it shows a Skip button). For hands-free skipping, set Playback -> Media Segment Actions -> Intro Segments -> Skip in the client. Prepend removes those markers so the item plays from the start.'));
                 body.appendChild(placement);
 
+                // The wait time is per rule; only relevant for the "wait time" frequency.
+                const minutes = minutesStepper(rule);
+                const syncMinutes = () => {
+                    minutes.style.display = rule.Frequency === 'OncePerInterval' ? '' : 'none';
+                };
                 const frequency = selectField('Frequency',
                     [{ value: 'EveryTime', label: 'Every time you start an episode or movie' },
                      { value: 'OncePerInterval', label: 'Only after the wait time has passed' },
                      { value: 'OncePerSession', label: 'Once per session (until you disconnect)' }],
                     rule.Frequency,
-                    v => rule.Frequency = v);
-                frequency.appendChild(hint('"Every time" plays before the title you start; if you start a list, it plays before the first title only. "Only after the wait time" replays it once the minutes set at the top have passed. "Once per session" replays it after you close the app or sign out.'));
+                    v => { rule.Frequency = v; syncMinutes(); });
+                frequency.appendChild(hint('"Every time" plays before the title you start; if you start a list, it plays before the first title only. "Only after the wait time" replays it once the minutes set just below have passed. "Once per session" replays it after you close the app or sign out.'));
                 body.appendChild(frequency);
-
-                // libraries
-                const libWrap = checkboxList();
-                libraries.forEach(lib => {
-                    libWrap.appendChild(checkbox(lib.Name, rule.LibraryIds.includes(lib.Id), on => {
-                        rule.LibraryIds = on
-                            ? [...new Set([...rule.LibraryIds, lib.Id])]
-                            : rule.LibraryIds.filter(id => id !== lib.Id);
-                    }));
-                });
-                if (libraries.length === 0) {
-                    libWrap.appendChild(elem('<div class="fieldDescription">No libraries found.</div>'));
-                }
-                body.appendChild(field('Libraries (empty = all)', libWrap));
-
-                // users
-                const userWrap = checkboxList();
-                users.forEach(u => {
-                    userWrap.appendChild(checkbox(u.Name, rule.UserIds.includes(u.Id), on => {
-                        rule.UserIds = on
-                            ? [...new Set([...rule.UserIds, u.Id])]
-                            : rule.UserIds.filter(id => id !== u.Id);
-                    }));
-                });
-                if (users.length === 0) {
-                    userWrap.appendChild(elem('<div class="fieldDescription">No users found.</div>'));
-                }
-                body.appendChild(field('Active for users (empty = all)', userWrap));
+                syncMinutes();
+                body.appendChild(minutes);
 
                 // target tree (collapsible: it is the longest part of a rule)
                 const targetBox = document.createElement('details');
@@ -689,11 +702,41 @@
                 targetSummary.appendChild(elem('<span class="material-icons" aria-hidden="true">expand_more</span>'));
 
                 const updateTargetSummary = () => {
-                    const active = targets.filter(t => rule.TargetItemIds.includes(t.Id)).length;
-                    const excluded = rule.ExcludedItemIds.length;
-                    targetSummaryInfo.textContent = active === 0
-                        ? ' — all items'
-                        : ' — ' + active + ' selected' + (excluded > 0 ? ', ' + excluded + ' excluded' : '');
+                    const count = { libraries: 0, series: 0, seasons: 0, episodes: 0, movies: 0 };
+                    targets.forEach(lib => {
+                        if (!libraryInScope(rule, lib.Id)) return;
+                        if (rule.LibraryIds.includes(lib.Id)) count.libraries++;
+
+                        (lib.Children || []).forEach(node => {
+                            if (node.Type === 'Movie') {
+                                if (rule.TargetItemIds.includes(node.Id)) count.movies++;
+                                return;
+                            }
+
+                            if (!rule.TargetItemIds.includes(node.Id)) return;
+                            count.series++;
+                            (node.Children || []).forEach(season => {
+                                if (rule.ExcludedItemIds.includes(season.Id)) return;
+                                count.seasons++;
+                                (season.Children || []).forEach(ep => {
+                                    if (!rule.ExcludedItemIds.includes(ep.Id)) count.episodes++;
+                                });
+                            });
+                        });
+                    });
+
+                    const part = (n, singular, plural) => n > 0 ? n + ' ' + (n === 1 ? singular : plural) : null;
+                    const parts = [
+                        part(count.libraries, 'library', 'libraries'),
+                        part(count.series, 'series', 'series'),
+                        part(count.seasons, 'season', 'seasons'),
+                        part(count.episodes, 'episode', 'episodes'),
+                        part(count.movies, 'movie', 'movies')
+                    ].filter(p => p);
+
+                    targetSummaryInfo.textContent = parts.length > 0
+                        ? ' — ' + parts.join(', ')
+                        : ' — all items';
                 };
 
                 const treeHost = document.createElement('div');
@@ -701,7 +744,7 @@
                 treeHost.style.maxHeight = '22em';
                 treeHost.style.overflow = 'auto';
                 treeHost.style.marginTop = '0.5em';
-                treeHost.appendChild(hint('Series and movies to target (empty = all). Activating a series activates all its seasons and episodes.'));
+                treeHost.appendChild(hint('Pick the libraries, series, seasons or episodes this rule applies to (empty = all). Activating a library or series activates everything under it; uncheck a season or episode to leave it out.'));
 
                 const refreshTree = () => {
                     treeHost.querySelectorAll('.ir-treeNode').forEach(n => n.remove());
@@ -745,11 +788,35 @@
                 wrap.className = 'ir-treeNode';
                 wrap.style.paddingLeft = '1em';
 
+                if (node.Type === 'Library') {
+                    wrap.appendChild(checkbox(node.Name, rule.LibraryIds.includes(node.Id), on => {
+                        if (on) {
+                            rule.LibraryIds = [...new Set([...rule.LibraryIds, node.Id])];
+                        } else {
+                            rule.LibraryIds = rule.LibraryIds.filter(id => id !== node.Id);
+                            clearLibraryTargets(rule, node);
+                        }
+                        refresh();
+                    }));
+
+                    if (!libraryInScope(rule, node.Id)) {
+                        return wrap;
+                    }
+
+                    (node.Children || []).forEach(child => {
+                        const childWrap = renderTargetNode(rule, child, refresh, updateSummary);
+                        childWrap.style.paddingLeft = '1.5em';
+                        wrap.appendChild(childWrap);
+                    });
+                    return wrap;
+                }
+
                 if (node.Type === 'Movie') {
                     wrap.appendChild(checkbox(node.Name, rule.TargetItemIds.includes(node.Id), on => {
                         rule.TargetItemIds = on
                             ? [...new Set([...rule.TargetItemIds, node.Id])]
                             : rule.TargetItemIds.filter(id => id !== node.Id);
+                        updateSummary();
                     }));
                     return wrap;
                 }
@@ -820,6 +887,20 @@
                 rule.ExcludedItemIds = rule.ExcludedItemIds.filter(id => !ids.has(id));
             };
 
+            // Dropping a library from the rule also drops every target/exclusion under it.
+            const clearLibraryTargets = (rule, libraryNode) => {
+                const ids = new Set();
+                (libraryNode.Children || []).forEach(node => {
+                    ids.add(node.Id);
+                    (node.Children || []).forEach(season => {
+                        ids.add(season.Id);
+                        (season.Children || []).forEach(ep => ids.add(ep.Id));
+                    });
+                });
+                rule.TargetItemIds = rule.TargetItemIds.filter(id => !ids.has(id));
+                rule.ExcludedItemIds = rule.ExcludedItemIds.filter(id => !ids.has(id));
+            };
+
             // ---------- actions ----------
             const upload = () => {
                 const input = document.querySelector('#uploadFile');
@@ -840,19 +921,11 @@
 
             const save = () => {
                 config.MoviesOnly = document.querySelector('#moviesOnly').checked;
-                const minutes = parseInt(document.querySelector('#repeatAfterMinutes').value, 10);
-                config.RepeatAfterMinutes = Math.min(99999, Math.max(1, minutes || 180));
                 Dashboard.showLoadingMsg();
                 ApiClient.updatePluginConfiguration(pluginId, config).then(() => {
                     Dashboard.hideLoadingMsg();
                     Dashboard.processPluginConfigurationUpdateResult();
                 });
-            };
-
-            const stepMinutes = (delta) => {
-                const input = document.querySelector('#repeatAfterMinutes');
-                const current = parseInt(input.value, 10) || 0;
-                input.value = Math.min(99999, Math.max(1, current + delta));
             };
 
             document.querySelector('#introReplacerForm').addEventListener('submit', (e) => {
@@ -866,8 +939,6 @@
             document.querySelector('#uploadBtn').addEventListener('click', () => document.querySelector('#uploadFile').click());
             document.querySelector('#uploadFile').addEventListener('change', upload);
             document.querySelector('#pickVideoBtn').addEventListener('click', openVideoPicker);
-            document.querySelector('#minutesDown').addEventListener('click', () => stepMinutes(-1));
-            document.querySelector('#minutesUp').addEventListener('click', () => stepMinutes(1));
 
             load();
         })();

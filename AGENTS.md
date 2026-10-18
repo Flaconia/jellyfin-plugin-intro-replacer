@@ -56,8 +56,9 @@ lets the client skip the item's own intro. Target: **Jellyfin 10.10.x**.
   (`MediaBrowser.Controller.Persistence`, DI singleton). `IChapterManager` only saves.
   `ChapterInfo` has only `StartPositionTicks` — the end comes from the next chapter or
   the item runtime. Audio-based auto-detection is **not** implemented.
-- **Frequency has three modes.** `EveryTime`, `OncePerInterval` (uses
-  `RepeatAfterMinutes`) and `OncePerSession`. "Session" here is the Jellyfin session:
+- **Frequency has three modes.** `EveryTime`, `OncePerInterval` (uses the rule's
+  `RepeatAfterMinutes`, present on `IntroRule`, not on `PluginConfiguration`) and
+  `OncePerSession`. "Session" here is the Jellyfin session:
   the provider resolves it from the request's `Jellyfin-DeviceId` claim and
   `ISessionManager.Sessions`, and `Plugin.cs` forwards `ISessionManager.SessionEnded`
   (client disconnect) to `IntroSessionTracker.NotifySessionEnded`. Keep the tracker free
@@ -119,7 +120,7 @@ docker compose -f docker/compose.yaml up -d                          # then rest
 - `Services/IntroSegmentProvider.cs` — `IMediaSegmentProvider` exposing the chapter-based Intro segment.
 - `Services/IntroSegmentHelper.cs` — applies `Replace`/`Prepend` to `Intro` media segments.
 - `Services/IntroSessionTracker.cs` — intro-repeat bookkeeping (wait-time + once-per-session); pure, unit-tested, no Jellyfin types.
-- `Api/IntroReplacerController.cs` — REST: `/IntroReplacer/Assets` (list/upload/delete), `/IntroReplacer/Assets/FromLibrary/{itemId}` (use an existing library video as an intro), `/Videos` (every video in every library, for that picker), `/Libraries`, `/Users`, `/Targets` (series/season/episode tree), `/Test/{itemId}`.
+- `Api/IntroReplacerController.cs` — REST: `/IntroReplacer/Assets` (list/upload/delete), `/IntroReplacer/Assets/FromLibrary/{itemId}` (use an existing library video as an intro), `/Videos` (every video in every library, for that picker), `/Users`, `/Targets` (library → series → seasons → episodes tree, movies as direct library children), `/Test/{itemId}`.
 - `Configuration/config.html` — dashboard page. Inline `<script>` (no external controller file); talks to the endpoints above and to Jellyfin's standard `get/updatePluginConfiguration`. Follows the vanilla Control Panel markup (`<form>` limited to 54em, `h1.pageTitle`, `h2.sectionTitle`, `inputContainer`/`checkboxContainer`/`checkboxList`, `raised` buttons, `raised button-submit block` Save); the library-video picker is a hand-built `.dialogContainer > .dialog.formDialog` modal — plugin pages **cannot** `require` `dialogHelper` (no `window.require`/`window.define` in 10.10).
 
 ## Conventions
@@ -139,10 +140,14 @@ docker compose -f docker/compose.yaml up -d                          # then rest
   empty `FileName`, and deleting it must only unregister it — never delete the user's
   media.
 - The hidden `Intro Replacer` library and its intro clips must never show up in the
-  config UI. `GET /Libraries` and `GET /Targets` filter it out using
-  `IntroLibraryManager.GetLibraryItemId()` (targets via
-  `ILibraryManager.GetCollectionFolders`). Add the same filter to any new endpoint that
-  enumerates libraries or items.
+  config UI. `GET /Targets` and `GET /Videos` filter it out using
+  `IntroLibraryManager.GetLibraryItemId()` (one query per virtual folder, skipping the
+  hidden one). Add the same filter to any new endpoint that enumerates libraries or
+  items.
+- The targets tree is the only place library scoping is chosen: `GET /Targets` returns
+  the libraries themselves as the top-level nodes, so there is no separate library
+  checkbox list and no `GET /Libraries` endpoint. An empty `LibraryIds` means "all
+  libraries".
 - There is no `Chance`/probability field by design; ordering + conditions decide.
 - Owner in `build.yaml`/`manifest.json` is `flaconia`. Before publishing to a plugin
   repository, fill in `sourceUrl`/`checksum` in `manifest.json`.

@@ -151,7 +151,7 @@ public class IntroProvider : IIntroProvider
                 return Enumerable.Empty<IntroInfo>();
             }
 
-            if (!ShouldPlay(plugin, selection.Frequency, user, item))
+            if (!ShouldPlay(plugin, selection, user, item))
             {
                 return Enumerable.Empty<IntroInfo>();
             }
@@ -177,14 +177,15 @@ public class IntroProvider : IIntroProvider
         }
     }
 
-    private bool ShouldPlay(IntroReplacerPlugin plugin, IntroFrequency frequency, User user, BaseItem item)
+    private bool ShouldPlay(IntroReplacerPlugin plugin, IntroSelection selection, User user, BaseItem item)
     {
+        var frequency = selection.Frequency;
         if (frequency == IntroFrequency.EveryTime)
         {
             return true;
         }
 
-        var wait = TimeSpan.FromMinutes(Math.Max(1, plugin.Configuration.RepeatAfterMinutes));
+        var wait = TimeSpan.FromMinutes(Math.Max(1, selection.RepeatAfterMinutes));
 
         if (frequency == IntroFrequency.OncePerInterval)
         {

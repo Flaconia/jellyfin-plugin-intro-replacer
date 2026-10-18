@@ -10,12 +10,14 @@ Local Intros plugin).
 ## How it works
 
 - A rule engine (first-match-wins) picks an intro file based on library, users,
-  tags, genres, studios, current/release date windows, or a series/season/episode
-  target tree.
+  tags, genres, studios, current/release date windows, or a library → series → season
+  → episode target tree.
+- In the target tree, an empty selection means "all libraries"; the rule header shows a
+  live count (e.g. `1 library, 2 series, 4 seasons, 20 episodes`).
 - Per rule you choose **Replace** (skip the item's own intro) or **Prepend** (play
   the item from the beginning), and **how often the intro plays**: every time you start
-  a title, only after a wait time you set, or once per session (again after you close
-  the app or sign out).
+  a title, only after a per-rule wait time you set, or once per session (again after you
+  close the app or sign out).
 - Uploaded intro files are stored in the plugin data folder and registered through a
   **hidden internal library** (`Intro Replacer`), hidden from every user's home. This
   is required: Jellyfin silently drops intro files that are not scanned library

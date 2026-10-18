@@ -266,24 +266,6 @@ public class IntroReplacerController : ControllerBase
     }
 
     /// <summary>
-    /// Lists libraries so the config page can offer them as rule conditions.
-    /// </summary>
-    /// <returns>The libraries.</returns>
-    [HttpGet("Libraries")]
-    [ProducesResponseType(StatusCodes.Status200OK)]
-    public ActionResult<IEnumerable<LibraryDto>> GetLibraries()
-    {
-        var introLibraryId = Plugin.IntroLibrary.GetLibraryItemId();
-
-        var libraries = _libraryManager.GetVirtualFolders()
-            .Select(v => (Folder: v, Id: Guid.TryParse(v.ItemId, out var id) ? id : Guid.Empty))
-            .Where(x => x.Id != Guid.Empty && x.Id != introLibraryId)
-            .Select(x => new LibraryDto(x.Id, x.Folder.Name));
-
-        return Ok(libraries);
-    }
-
-    /// <summary>
     /// Lists users so the config page can offer them as rule conditions.
     /// </summary>
     /// <returns>The users.</returns>
@@ -299,65 +281,84 @@ public class IntroReplacerController : ControllerBase
     }
 
     /// <summary>
-    /// Returns the series/season/episode (and movie) tree used by the target picker.
+    /// Returns the target tree used by the config page: every targetable library,
+    /// each with its series (season/episode children) and movies.
     /// </summary>
-    /// <returns>The target tree, ordered by sort name.</returns>
+    /// <returns>The target tree, libraries first, ordered by name.</returns>
     [HttpGet("Targets")]
     [ProducesResponseType(StatusCodes.Status200OK)]
     public ActionResult<IEnumerable<TargetNodeDto>> GetTargets()
     {
         var user = _userManager.Users.FirstOrDefault();
 
-        var topLevel = _libraryManager.GetItemsResult(new InternalItemsQuery
-        {
-            IncludeItemTypes = new[] { BaseItemKind.Series, BaseItemKind.Movie },
-            Recursive = true,
-            IsVirtualItem = false
-        }).Items;
-
         // Never offer the plugin's own hidden intro library (its intro clips show up
         // as movies) as something to target.
         var introLibraryId = Plugin.IntroLibrary.GetLibraryItemId();
 
         var result = new List<TargetNodeDto>();
-        foreach (var item in topLevel.OrderBy(i => i.SortName, StringComparer.OrdinalIgnoreCase))
+
+        // One query per library: the library name comes for free, without walking the
+        // ancestor chain of every single item.
+        foreach (var library in _libraryManager.GetVirtualFolders()
+            .OrderBy(v => v.Name, StringComparer.OrdinalIgnoreCase))
         {
-            if (introLibraryId is not null &&
-                _libraryManager.GetCollectionFolders(item).Any(f => f.Id == introLibraryId))
+            if (!Guid.TryParse(library.ItemId, out var libraryId)
+                || libraryId == Guid.Empty
+                || libraryId == introLibraryId)
             {
                 continue;
             }
 
-            if (item is Series series)
+            var items = _libraryManager.GetItemsResult(new InternalItemsQuery
             {
-                var seasons = new List<TargetNodeDto>();
-                if (user is not null)
+                IncludeItemTypes = new[] { BaseItemKind.Series, BaseItemKind.Movie },
+                Recursive = true,
+                IsVirtualItem = false,
+                ParentId = libraryId
+            }).Items;
+
+            if (items.Count == 0)
+            {
+                // Nothing targetable (for example a music library); skip the noise.
+                continue;
+            }
+
+            var children = new List<TargetNodeDto>();
+            foreach (var item in items.OrderBy(i => i.SortName, StringComparer.OrdinalIgnoreCase))
+            {
+                if (item is Series series)
                 {
-                    foreach (var season in series.GetChildren(user, true)
-                                 .OfType<Season>()
-                                 .OrderBy(s => s.IndexNumber ?? 0))
+                    var seasons = new List<TargetNodeDto>();
+                    if (user is not null)
                     {
-                        var episodes = season.GetChildren(user, true)
-                            .OfType<Episode>()
-                            .OrderBy(e => e.IndexNumber ?? 0)
-                            .Select(e => new TargetNodeDto(e.Id, e.Name, "Episode", e.IndexNumber, Array.Empty<TargetNodeDto>()))
-                            .ToList();
+                        foreach (var season in series.GetChildren(user, true)
+                                     .OfType<Season>()
+                                     .OrderBy(s => s.IndexNumber ?? 0))
+                        {
+                            var episodes = season.GetChildren(user, true)
+                                .OfType<Episode>()
+                                .OrderBy(e => e.IndexNumber ?? 0)
+                                .Select(e => new TargetNodeDto(e.Id, e.Name, "Episode", e.IndexNumber, Array.Empty<TargetNodeDto>()))
+                                .ToList();
 
-                        seasons.Add(new TargetNodeDto(
-                            season.Id,
-                            season.Name,
-                            "Season",
-                            season.IndexNumber,
-                            episodes));
+                            seasons.Add(new TargetNodeDto(
+                                season.Id,
+                                season.Name,
+                                "Season",
+                                season.IndexNumber,
+                                episodes));
+                        }
                     }
-                }
 
-                result.Add(new TargetNodeDto(series.Id, series.Name, "Series", null, seasons));
+                    children.Add(new TargetNodeDto(series.Id, series.Name, "Series", null, seasons));
+                }
+                else if (item is Movie movie)
+                {
+                    children.Add(new TargetNodeDto(movie.Id, movie.Name, "Movie", null, Array.Empty<TargetNodeDto>()));
+                }
             }
-            else if (item is Movie movie)
-            {
-                result.Add(new TargetNodeDto(movie.Id, movie.Name, "Movie", null, Array.Empty<TargetNodeDto>()));
-            }
+
+            result.Add(new TargetNodeDto(libraryId, library.Name, "Library", null, children));
         }
 
         return Ok(result);
@@ -412,11 +413,6 @@ public record IntroAssetDto(Guid Id, string Name, bool Enabled, bool Exists, str
 /// <param name="Type">Item type name.</param>
 /// <param name="Library">Name of the library the video belongs to.</param>
 public record VideoCandidateDto(Guid Id, string Label, string Type, string Library);
-
-/// <summary>Library representation.</summary>
-/// <param name="Id">Library id.</param>
-/// <param name="Name">Library name.</param>
-public record LibraryDto(Guid Id, string Name);
 
 /// <summary>User representation.</summary>
 /// <param name="Id">User id.</param>

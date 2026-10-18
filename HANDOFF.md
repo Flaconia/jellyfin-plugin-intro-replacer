@@ -1,6 +1,6 @@
 # HANDOFF — Intro Replacer (Jellyfin plugin)
 
-Last updated: 2026-10-18 (session 6). Read this first; then `AGENTS.md` for the hard
+Last updated: 2026-10-18 (session 7). Read this first; then `AGENTS.md` for the hard
 constraints, then `README.md` for the user-facing summary.
 
 ## 1. What we are building
@@ -268,6 +268,29 @@ Tests are now 32 (`IntroSessionTrackerTests` adds 9).
    interactions, the save submit and the picker modal. It also documents that jsdom
    leaves `is="emby-*"` un-upgraded, i.e. the page must work with plain elements too.
 
+## 3f. Session 7 notes — per-rule wait time, libraries in the target tree
+
+1. **Wait time moved into the rule.** `IntroRule` gained `RepeatAfterMinutes` (default
+   180) and `PluginConfiguration.RepeatAfterMinutes` was removed, so each rule decides
+   its own wait. `RuleEngine.IntroSelection` now carries it, and `IntroProvider.ShouldPlay`
+   reads it from the selection (also the fallback used by `OncePerSession` when no client
+   session can be resolved). The config page shows the stepper only while the rule's
+   Frequency is `OncePerInterval`. Old configs that still have the root
+   `<RepeatAfterMinutes>` simply lose it (XmlSerializer ignores the unknown element) and
+   the rules fall back to 180.
+2. **Libraries are part of the target tree.** `GET /Targets` now returns one node per
+   targetable library (`Type = "Library"`, one `ParentId` query per virtual folder, the
+   hidden intro library skipped by id) with its series/movies, seasons and episodes as
+   children. The standalone "Libraries (empty = all)" checkbox list and the now-unused
+   `GET /Libraries` endpoint are gone. In the tree, an empty `LibraryIds` means "all
+   libraries", so every library renders its children; picking a library narrows the rule
+   and hides the others. Deselecting a library also drops its targets/exclusions.
+3. **Target summary is a count.** The Targets summary now reads like
+   `1 library, 2 series, 4 seasons, 20 episodes` (zero-count groups omitted; `all items`
+   when nothing is selected). Counting walks the loaded tree with the same
+   active/excluded logic the engine uses, so it is exact.
+4. **"Active for users" moved up**, directly under the rule's Name field.
+
 ## 4. Automatic intro detection — status
 
 - **Chapters: implemented** (`IntroChapterDetector`) and unit-tested. It is read-only
@@ -286,16 +309,18 @@ Tests are now 32 (`IntroSessionTrackerTests` adds 9).
 `Configuration/PluginConfiguration.cs` (XML-serialised — keep it to simple settable
 types):
 
-- `PluginConfiguration`: `Assets`, `Rules`, `MoviesOnly`, `RepeatAfterMinutes` (180).
+- `PluginConfiguration`: `Assets`, `Rules`, `MoviesOnly`.
 - `IntroAsset`: `Id`, `Name`, `FileName` (the stored file under the intros folder, empty
   for library assets), `LibraryItemId` (an existing library video, `Guid.Empty` for
   uploads), `Enabled`.
-- `IntroRule`: `Id`, `Name`, `Enabled`, `LibraryIds`, `UserIds`, `TargetItemIds`
+- `IntroRule`: `Id`, `Name`, `Enabled`, `LibraryIds` (empty = all libraries),
+  `UserIds`, `TargetItemIds`
   (active series/movie ids; empty = all), `ExcludedItemIds` (deactivated season/episode
   ids), `IncludeTags`, `ExcludeTags`, `Genres`, `Studios`, `DateRange`,
   `ReleaseDateRange`, `AssetIds`, `PlaybackMode` (`RandomOne`/`SequentialAll`),
   `Placement` (`Replace`/`Prepend`), `Frequency`
-  (`EveryTime`/`OncePerInterval`/`OncePerSession`).
+  (`EveryTime`/`OncePerInterval`/`OncePerSession`), `RepeatAfterMinutes` (180, used by
+  `OncePerInterval`).
 - There is intentionally **no** chance/probability field. (Historically a rule could
   have a 0–100 roll that decided whether a matched rule fired, falling through on
   failure; the user removed it — ordering + conditions decide now.)
@@ -311,7 +336,8 @@ route `[controller]` → `/IntroReplacer/...`):
   the server" picker. Runs one query per library (`InternalItemsQuery.ParentId`) so the
   library name comes for free instead of walking each item's ancestor chain; the DTO
   carries `Library` and the picker groups by it.
-- `GET /Libraries`, `GET /Users`, `GET /Targets` (series → seasons → episodes tree).
+- `GET /Users`, `GET /Targets` (library → series → seasons → episodes tree; movies are
+  direct children of their library).
 - `POST /Test/{itemId}?userId=` — evaluate rules without playing.
 
 Config is saved through Jellyfin's standard `get/updatePluginConfiguration`.
@@ -341,7 +367,10 @@ Config is saved through Jellyfin's standard `get/updatePluginConfiguration`.
   Follows the vanilla Control Panel markup: a `<form>` (which the global
   `form { max-width: 54em }` limits), `h1.pageTitle` + `h2.sectionTitle` headers,
   `inputContainer`/`checkboxContainer`/`checkboxList` blocks, `raised` buttons and a
-  `raised button-submit block` Save. The "add a video from a library" picker is a
+  `raised button-submit block` Save. Inside a rule the order is Name, Active-for-users,
+  Intros, Playback, Placement, Frequency (+ a per-rule minutes stepper shown only for
+  `OncePerInterval`), the collapsible Targets tree (libraries → series → seasons →
+  episodes) and the tag/genre/studio fields. The "add a video from a library" picker is a
   hand-built modal (`.dialogContainer > .dialog.formDialog.paperList`) because plugin
   pages cannot `require` `dialogHelper` (`window.require`/`window.define` do not
   exist in 10.10). Custom elements (`is="emby-input|emby-checkbox|emby-select|
@@ -349,9 +378,9 @@ Config is saved through Jellyfin's standard `get/updatePluginConfiguration`.
   inserted into the document** — the v0 polyfill upgrades on MutationObserver, so
   `document.createElement` + `setAttribute('is', …)` never upgrades (and would crash
   `emby-input`, whose `createdCallback` touches `parentNode`).
-- `Jellyfin.Plugin.IntroReplacer.Tests/` — `RuleEngineTests` (15),
+- `Jellyfin.Plugin.IntroReplacer.Tests/` — `RuleEngineTests` (16),
   `IntroChapterDetectorTests` (8), `IntroSessionTrackerTests` (8 methods / 9 cases)
-  → 32 passing.
+  → 33 passing.
 
 ## 7. Commands
 
