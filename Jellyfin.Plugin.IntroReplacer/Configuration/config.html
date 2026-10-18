@@ -155,6 +155,52 @@
             width: auto;
         }
 
+        /* Per-rule intro picker: only the chosen intros are shown, each with a
+           Remove button, plus one trailing "(add)" dropdown. Keeps the rule
+           compact even with many intro files. */
+        .ir-introRows {
+            margin-top: 0.2em;
+        }
+
+        .ir-introRow {
+            display: flex;
+            align-items: center;
+            margin-bottom: 0.5em;
+        }
+
+        .ir-introRow > .selectContainer {
+            flex: 1 1 auto;
+            min-width: 0;
+            margin-bottom: 0;
+        }
+
+        .ir-introRow > .emby-button {
+            flex: 0 0 auto;
+            margin: 0 0 0 0.5em;
+        }
+
+        /* Targets is the longest, most important part of a rule: frame it and
+           darken its surface so it stands out from the card. */
+        .ir-targets {
+            margin: 1em 0 1.8em !important;
+            border: 0.1em solid rgba(128, 128, 128, 0.4);
+            border-radius: 0.2em;
+            background: rgba(0, 0, 0, 0.25);
+        }
+
+        .ir-targets > summary {
+            border-bottom: 0.1em solid rgba(128, 128, 128, 0.4);
+        }
+
+        .ir-targets > summary > .ir-collapseTitle {
+            font-size: 1.25em;
+            font-weight: 600;
+        }
+
+        .ir-tags > summary > .ir-collapseTitle {
+            font-size: 1.15em;
+        }
+
         .ir-pickRow {
             border-bottom: 1px solid rgba(128, 128, 128, 0.25);
         }
@@ -277,6 +323,7 @@
                 Name: 'New rule',
                 Enabled: true,
                 LibraryIds: [],
+                ExcludedLibraryIds: [],
                 UserIds: [],
                 TargetItemIds: [],
                 ExcludedItemIds: [],
@@ -296,9 +343,10 @@
             const csv = (arr) => (arr || []).join(', ');
             const parseCsv = (value) => value.split(',').map(s => s.trim()).filter(s => s.length > 0);
 
-            // An empty library selection means "all libraries".
+            // Libraries are active unless explicitly excluded, so unchecking one
+            // (like a series/season) hides its content.
             const libraryInScope = (rule, libraryId) =>
-                rule.LibraryIds.length === 0 || rule.LibraryIds.includes(libraryId);
+                !rule.ExcludedLibraryIds.includes(libraryId);
 
             // ---------- generic form controls ----------
             const checkbox = (labelText, checked, onChange) => {
@@ -343,7 +391,7 @@
                 return wrap;
             };
 
-            const textField = (labelText, value, onChange) => {
+            const textField = (labelText, value, onChange, tipText) => {
                 const wrap = frag(
                     '<div class="inputContainer">'
                     + '<input type="text" is="emby-input" label="' + escapeHtml(labelText) + '" />'
@@ -351,7 +399,16 @@
                 const input = wrap.querySelector('input');
                 input.value = value || '';
                 input.addEventListener('input', () => onChange(input.value));
-                return wrap;
+
+                if (!tipText) {
+                    return wrap;
+                }
+
+                const row = document.createElement('div');
+                row.className = 'ir-tipField';
+                row.appendChild(wrap);
+                row.appendChild(infoTip(tipText));
+                return row;
             };
 
             const selectField = (labelText, options, value, onChange, tipText) => {
@@ -462,6 +519,22 @@
                 videos = vids || [];
                 assetExists = {};
                 (assets || []).forEach(a => { assetExists[a.Id] = a.Exists; });
+
+                // Rules saved with an explicit library include-list (the old model,
+                // where empty meant "all") are converted to the exclude model the
+                // tree now uses: all libraries active unless excluded.
+                config.Rules.forEach(r => {
+                    r.ExcludedLibraryIds = r.ExcludedLibraryIds || [];
+                    if (r.LibraryIds && r.LibraryIds.length > 0) {
+                        const included = new Set(r.LibraryIds);
+                        targets.forEach(lib => {
+                            if (!included.has(lib.Id)) {
+                                r.ExcludedLibraryIds = [...new Set([...r.ExcludedLibraryIds, lib.Id])];
+                            }
+                        });
+                        r.LibraryIds = [];
+                    }
+                });
 
                 document.querySelector('#moviesOnly').checked = !!config.MoviesOnly;
                 renderAssets();
@@ -672,6 +745,75 @@
             };
 
             // ---------- rules ----------
+            // Per-rule intro picker: only the chosen intros are listed (compact),
+            // each with a Remove button, followed by a trailing "(add)" dropdown of
+            // the remaining intros in alphabetical order.
+            const introRowList = (rule, rerender) => {
+                const wrap = document.createElement('div');
+                wrap.className = 'ir-introRows';
+
+                if (config.Assets.length === 0) {
+                    wrap.appendChild(hint('Upload an intro file first.'));
+                    return wrap;
+                }
+
+                const sorted = config.Assets
+                    .slice()
+                    .sort((a, b) => describeAsset(a).localeCompare(describeAsset(b), undefined, { sensitivity: 'base' }));
+
+                const selectRow = (options, selectedId, onSelect) => {
+                    const row = document.createElement('div');
+                    row.className = 'ir-introRow';
+                    const container = elem('<div class="selectContainer"><select is="emby-select"></select></div>');
+                    const select = container.querySelector('select');
+                    options.forEach(asset => {
+                        const option = document.createElement('option');
+                        option.value = asset.Id;
+                        option.textContent = describeAsset(asset);
+                        if (asset.Id === selectedId) option.selected = true;
+                        select.appendChild(option);
+                    });
+                    select.addEventListener('change', () => onSelect(select.value));
+                    row.appendChild(container);
+                    return row;
+                };
+
+                rule.AssetIds.slice().forEach((id, index) => {
+                    if (!sorted.some(a => a.Id === id)) return; // stale id
+
+                    // Switching a row only offers intros not used by another row.
+                    const options = sorted.filter((a, i) =>
+                        a.Id === id || !rule.AssetIds.some((other, otherIndex) => otherIndex !== index && other === a.Id));
+
+                    const row = selectRow(options, id, value => {
+                        rule.AssetIds[index] = value;
+                        rerender();
+                    });
+                    row.appendChild(button('Remove', () => {
+                        rule.AssetIds.splice(index, 1);
+                        rerender();
+                    }));
+                    wrap.appendChild(row);
+                });
+
+                const available = sorted.filter(a => !rule.AssetIds.includes(a.Id));
+                if (available.length > 0) {
+                    const row = selectRow(available, null, value => {
+                        if (!value) return;
+                        rule.AssetIds = [...rule.AssetIds, value];
+                        rerender();
+                    });
+                    const placeholder = document.createElement('option');
+                    placeholder.value = '';
+                    placeholder.textContent = rule.AssetIds.length === 0 ? '(add)' : '(add another…)';
+                    row.querySelector('select').insertBefore(placeholder, row.querySelector('select').firstChild);
+                    placeholder.selected = true;
+                    wrap.appendChild(row);
+                }
+
+                return wrap;
+            };
+
             const renderRules = () => {
                 const host = document.querySelector('#ruleList');
                 host.innerHTML = '';
@@ -683,6 +825,7 @@
                 rule.ExcludedItemIds = rule.ExcludedItemIds || [];
                 rule.UserIds = rule.UserIds || [];
                 rule.LibraryIds = rule.LibraryIds || [];
+                rule.ExcludedLibraryIds = rule.ExcludedLibraryIds || [];
                 rule.AssetIds = rule.AssetIds || [];
 
                 const card = document.createElement('details');
@@ -730,19 +873,14 @@
                 }
                 body.appendChild(field('Active for users (empty = all)', userWrap));
 
-                // intros
-                const assetWrap = checkboxList();
-                config.Assets.forEach(asset => {
-                    assetWrap.appendChild(checkbox(describeAsset(asset), rule.AssetIds.includes(asset.Id), on => {
-                        rule.AssetIds = on
-                            ? [...new Set([...rule.AssetIds, asset.Id])]
-                            : rule.AssetIds.filter(id => id !== asset.Id);
-                    }));
-                });
-                if (config.Assets.length === 0) {
-                    assetWrap.appendChild(elem('<div class="fieldDescription">Upload an intro file first.</div>'));
-                }
-                body.appendChild(field('Intros (pick one or more)', assetWrap));
+                // intros (compact: only the chosen ones, plus an "(add)" dropdown)
+                const introHost = document.createElement('div');
+                const renderIntros = () => {
+                    introHost.innerHTML = '';
+                    introHost.appendChild(introRowList(rule, renderIntros));
+                };
+                renderIntros();
+                body.appendChild(field('Intros', introHost));
 
                 body.appendChild(selectField('Playback',
                     [{ value: 'RandomOne', label: 'Play one random intro' },
@@ -774,9 +912,10 @@
                 syncMinutes();
                 body.appendChild(minutes);
 
-                // target tree (collapsible: it is the longest part of a rule)
+                // target tree (collapsible: it is the longest, most important part
+                // of a rule, so it gets a framed, darker surface)
                 const targetBox = document.createElement('details');
-                targetBox.className = 'ir-collapse';
+                targetBox.className = 'ir-collapse ir-targets';
                 targetBox.open = openState[rule.Id + ':targets'] === true;
                 targetBox.addEventListener('toggle', () => {
                     openState[rule.Id + ':targets'] = targetBox.open;
@@ -795,9 +934,13 @@
 
                 const updateTargetSummary = () => {
                     const count = { libraries: 0, series: 0, seasons: 0, episodes: 0, movies: 0 };
+
+                    if (rule.ExcludedLibraryIds.length > 0) {
+                        count.libraries = targets.filter(lib => libraryInScope(rule, lib.Id)).length;
+                    }
+
                     targets.forEach(lib => {
                         if (!libraryInScope(rule, lib.Id)) return;
-                        if (rule.LibraryIds.includes(lib.Id)) count.libraries++;
 
                         (lib.Children || []).forEach(node => {
                             if (node.Type === 'Movie') {
@@ -836,7 +979,7 @@
                 treeHost.style.maxHeight = '22em';
                 treeHost.style.overflow = 'auto';
                 treeHost.style.marginTop = '0.5em';
-                treeHost.appendChild(hint('Pick the libraries, series, seasons or episodes this rule applies to (empty = all). Activating a library or series activates everything under it; uncheck a season or episode to leave it out.'));
+                treeHost.appendChild(hint('Everything is active by default. Uncheck a library, series, season or episode to leave it out; unchecking a level hides the ones under it.'));
 
                 const refreshTree = () => {
                     treeHost.querySelectorAll('.ir-treeNode').forEach(n => n.remove());
@@ -854,10 +997,32 @@
                 targetBox.appendChild(treeHost);
                 body.appendChild(targetBox);
 
-                body.appendChild(textField('Include tags (comma separated)', csv(rule.IncludeTags), v => rule.IncludeTags = parseCsv(v)));
-                body.appendChild(textField('Exclude tags (comma separated)', csv(rule.ExcludeTags), v => rule.ExcludeTags = parseCsv(v)));
-                body.appendChild(textField('Genres (comma separated)', csv(rule.Genres), v => rule.Genres = parseCsv(v)));
-                body.appendChild(textField('Studios (comma separated)', csv(rule.Studios), v => rule.Studios = parseCsv(v)));
+                // tags (collapsible like Targets; tags are matched against the item
+                // and its ancestors)
+                const tagsBox = document.createElement('details');
+                tagsBox.className = 'ir-collapse ir-tags';
+                tagsBox.open = openState[rule.Id + ':tags'] === true;
+                tagsBox.addEventListener('toggle', () => {
+                    openState[rule.Id + ':tags'] = tagsBox.open;
+                });
+
+                const tagsSummary = document.createElement('summary');
+                const tagsTitle = document.createElement('h3');
+                tagsTitle.className = 'ir-collapseTitle';
+                tagsTitle.textContent = 'Tags';
+                tagsSummary.appendChild(tagsTitle);
+                tagsSummary.appendChild(elem('<span class="material-icons" aria-hidden="true">expand_more</span>'));
+                tagsBox.appendChild(tagsSummary);
+
+                const tagsBody = document.createElement('div');
+                tagsBody.className = 'ir-collapseBody';
+                tagsBody.appendChild(textField('Include tags (comma separated)', csv(rule.IncludeTags), v => rule.IncludeTags = parseCsv(v),
+                    'Items containing these tags are included in the rule. Exclude tags take priority: an item carrying an exclude tag is left out. Tags are matched against the item and its parent series/season, and any one of them is enough.'));
+                tagsBody.appendChild(textField('Exclude tags (comma separated)', csv(rule.ExcludeTags), v => rule.ExcludeTags = parseCsv(v)));
+                tagsBody.appendChild(textField('Genres (comma separated)', csv(rule.Genres), v => rule.Genres = parseCsv(v)));
+                tagsBody.appendChild(textField('Studios (comma separated)', csv(rule.Studios), v => rule.Studios = parseCsv(v)));
+                tagsBox.appendChild(tagsBody);
+                body.appendChild(tagsBox);
 
                 const up = button('Move up', () => {
                     const [r] = config.Rules.splice(index, 1);
@@ -881,11 +1046,11 @@
                 wrap.style.paddingLeft = '1em';
 
                 if (node.Type === 'Library') {
-                    wrap.appendChild(checkbox(node.Name, rule.LibraryIds.includes(node.Id), on => {
+                    wrap.appendChild(checkbox(node.Name, libraryInScope(rule, node.Id), on => {
                         if (on) {
-                            rule.LibraryIds = [...new Set([...rule.LibraryIds, node.Id])];
+                            rule.ExcludedLibraryIds = rule.ExcludedLibraryIds.filter(id => id !== node.Id);
                         } else {
-                            rule.LibraryIds = rule.LibraryIds.filter(id => id !== node.Id);
+                            rule.ExcludedLibraryIds = [...new Set([...rule.ExcludedLibraryIds, node.Id])];
                             clearLibraryTargets(rule, node);
                         }
                         refresh();

@@ -68,6 +68,16 @@ public class RuleEngineTests
     }
 
     [Fact]
+    public void ExcludedLibraryBlocksItsItems()
+    {
+        var rule = new IntroRule { ExcludedLibraryIds = { Library1 } };
+        Assert.False(RuleEngine.Matches(rule, Context()));
+
+        rule.ExcludedLibraryIds = new List<Guid> { Guid.NewGuid() };
+        Assert.True(RuleEngine.Matches(rule, Context()));
+    }
+
+    [Fact]
     public void TargetItemConditionMatchesAncestors()
     {
         var rule = new IntroRule { TargetItemIds = { Series1 } };

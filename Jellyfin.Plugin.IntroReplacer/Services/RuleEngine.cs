@@ -73,6 +73,12 @@ public static class RuleEngine
             return false;
         }
 
+        // Libraries are active by default; an excluded library excludes its subtree.
+        if (rule.ExcludedLibraryIds.Any(context.CollectionFolderIds.Contains))
+        {
+            return false;
+        }
+
         // Item scope: empty target list means "all items matching the other conditions".
         // Otherwise the item (or one of its ancestors) must be an active target.
         if (rule.TargetItemIds.Count > 0)

@@ -308,6 +308,29 @@ Tests are now 32 (`IntroSessionTrackerTests` adds 9).
    silently disabled with no UI to re-enable it; selection now only checks that the asset
    id is still registered (`UnknownAssetIdsAreIgnored` test).
 
+## 3h. Session 9 notes — compact intro picker, tags section, library exclusion
+
+1. **The per-rule intro list is now a token picker.** Replaced the checkbox list of every
+   asset with `.ir-introRows`: one row per chosen asset (an `emby-select` that can switch
+   to another unused asset, plus a **Remove** button) and a trailing `emby-select` whose
+   first option is `(add)` (or `(add another…)` once something is chosen) followed by the
+   remaining intros in alphabetical order. Picking one appends a row and re-renders; a row
+   is never offered a duplicate of another row's asset. Keeps the rule compact when many
+   intros exist.
+2. **Tags got their own collapsible section** (`details.ir-tags`, same `<details>` +
+   local CSS pattern as Targets) holding `Include tags`, `Exclude tags`, `Genres` and
+   `Studios`. The Include-tags field carries a `?` tooltip explaining how tag targeting
+   works (matched against the item and its ancestors, exclude wins). Targets itself was
+   made more prominent (`.ir-targets`: framed, darker `rgba(0,0,0,.25)` surface, larger
+   title) so it reads as the key part of a rule.
+3. **Libraries are now exclude-based, so unchecking one hides it.** `IntroRule` gained
+   `ExcludedLibraryIds`; `RuleEngine.Matches` fails when any ancestor library is excluded
+   (the legacy `LibraryIds` include-list check stays for old configs). The tree renders a
+   library as checked unless excluded, and `load()` migrates a legacy non-empty
+   `LibraryIds` into `ExcludedLibraryIds` (all libraries not in the include list become
+   exclusions) and clears it, so unchecking a library now hides its whole subtree exactly
+   like a series/season. Test: `ExcludedLibraryBlocksItsItems`.
+
 ## 4. Automatic intro detection — status
 
 - **Chapters: implemented** (`IntroChapterDetector`) and unit-tested. It is read-only
@@ -330,7 +353,8 @@ types):
 - `IntroAsset`: `Id`, `Name`, `FileName` (the stored file under the intros folder, empty
   for library assets), `LibraryItemId` (an existing library video, `Guid.Empty` for
   uploads).
-- `IntroRule`: `Id`, `Name`, `Enabled`, `LibraryIds` (empty = all libraries),
+- `IntroRule`: `Id`, `Name`, `Enabled`, `LibraryIds` (legacy include-list, empty = all
+  libraries), `ExcludedLibraryIds` (libraries left out; all active by default),
   `UserIds`, `TargetItemIds`
   (active series/movie ids; empty = all), `ExcludedItemIds` (deactivated season/episode
   ids), `IncludeTags`, `ExcludeTags`, `Genres`, `Studios`, `DateRange`,
@@ -395,9 +419,9 @@ Config is saved through Jellyfin's standard `get/updatePluginConfiguration`.
   inserted into the document** — the v0 polyfill upgrades on MutationObserver, so
   `document.createElement` + `setAttribute('is', …)` never upgrades (and would crash
   `emby-input`, whose `createdCallback` touches `parentNode`).
-- `Jellyfin.Plugin.IntroReplacer.Tests/` — `RuleEngineTests` (16),
+- `Jellyfin.Plugin.IntroReplacer.Tests/` — `RuleEngineTests` (17),
   `IntroChapterDetectorTests` (8), `IntroSessionTrackerTests` (8 methods / 9 cases)
-  → 33 passing.
+  → 34 passing.
 
 ## 7. Commands
 

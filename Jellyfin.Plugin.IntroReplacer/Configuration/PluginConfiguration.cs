@@ -66,8 +66,18 @@ public class IntroRule
     /// <summary>Gets or sets a value indicating whether this rule is active.</summary>
     public bool Enabled { get; set; } = true;
 
-    /// <summary>Gets or sets the library ids this rule applies to.</summary>
+    /// <summary>
+    /// Gets or sets the library ids this rule applies to. Kept for configurations
+    /// written by older versions; the config page now drives scoping through
+    /// <see cref="ExcludedLibraryIds"/>. An empty list means "all libraries".
+    /// </summary>
     public List<Guid> LibraryIds { get; set; } = new();
+
+    /// <summary>
+    /// Gets or sets library ids excluded from this rule. All libraries are active
+    /// unless listed here, so deactivating one hides its contents.
+    /// </summary>
+    public List<Guid> ExcludedLibraryIds { get; set; } = new();
 
     /// <summary>Gets or sets the user ids this rule applies to (empty = all users).</summary>
     public List<Guid> UserIds { get; set; } = new();

@@ -149,8 +149,14 @@ docker compose -f docker/compose.yaml up -d                          # then rest
   items.
 - The targets tree is the only place library scoping is chosen: `GET /Targets` returns
   the libraries themselves as the top-level nodes, so there is no separate library
-  checkbox list and no `GET /Libraries` endpoint. An empty `LibraryIds` means "all
-  libraries".
+  checkbox list and no `GET /Libraries` endpoint. Libraries are active by default and
+  deactivated through `ExcludedLibraryIds` (unchecking hides the library's whole
+  subtree, like a series/season; the config page converts any legacy `LibraryIds`
+  include-list into exclusions on load). An empty `LibraryIds` still means "all".
+- A rule's intro picker is a compact token list: only the chosen assets are shown, each
+  with a Remove button, followed by a trailing `(add …)` `emby-select` listing the
+  remaining intros in alphabetical order. The Tags conditions live in their own
+  collapsible `<details>` (`Include/Exclude tags`, `Genres`, `Studios`).
 - There is no `Chance`/probability field by design; ordering + conditions decide.
 - Owner in `build.yaml`/`manifest.json` is `flaconia`. Before publishing to a plugin
   repository, fill in `sourceUrl`/`checksum` in `manifest.json`.
