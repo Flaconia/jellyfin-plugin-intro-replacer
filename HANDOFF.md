@@ -1,6 +1,6 @@
 # HANDOFF — Intro Replacer (Jellyfin plugin)
 
-Last updated: 2026-10-18 (session 4). Read this first; then `AGENTS.md` for the hard
+Last updated: 2026-10-18 (session 5). Read this first; then `AGENTS.md` for the hard
 constraints, then `README.md` for the user-facing summary.
 
 ## 1. What we are building
@@ -59,8 +59,12 @@ Verified in the live server: `/UserViews` shows only the real library, and the D
 library's item id.
 
 The library is created lazily by `EnsureAsync()`:
-- from `IntroProvider.GetIntros` when the library does not exist yet, and
+- from `IntroProvider.GetIntros` when a file-based asset is resolved and the library
+  does not exist yet, and
 - from the upload endpoint after a new file is stored (then triggers a scan).
+
+Assets that point at an **existing library video** (`LibraryItemId`) do not need any of
+this: the item is already scanned, so the provider returns its own `Path` + `Id`.
 
 ### 2b. Media segments (skipping the item's own intro)
 
@@ -211,6 +215,27 @@ Three user-reported problems.
 
 Tests are now 32 (`IntroSessionTrackerTests` adds 9).
 
+## 3d. Session 5 notes
+
+1. **Existing library videos can be used as intros.** `IntroAsset` gained
+   `LibraryItemId` (non-nullable; `Guid.Empty` = an uploaded file). `GET /Videos`
+   lists every `Movie`/`Episode`/`Video`/`MusicVideo`/`Trailer` with a path in every
+   library except the hidden intro library, and `POST /Assets/FromLibrary/{itemId}`
+   registers one (idempotent; the media file is never copied or touched). The provider
+   resolves such an asset with `ILibraryManager.GetItemById` and returns
+   `IntroInfo { Path, ItemId }` — no hidden-library scan involved. Deleting such an
+   asset only unregisters it (`IntroAssetStore.Delete` no-ops because `FileName` is
+   empty).
+2. **Config page UX.** Each rule is a `<details>` card (click the summary to
+   collapse; the Enabled checkbox stays in the summary and stops click propagation so
+   it does not toggle the card). The Targets block inside a rule is its own
+   `<details>`, closed by default and built lazily on first open. Open/closed state is
+   kept in a JS `openState` map keyed by rule id, so it survives re-renders (move /
+   remove / refresh after save). Rules that still carry the old all-zero id get a fresh
+   client-side `guid()` on load, otherwise they would all share one `openState` slot.
+3. **Episode numbers in the target tree.** `TargetNodeDto` already carried `Index`;
+   the checkbox label is now `"{Index}. {Name}"` for episodes.
+
 ## 4. Automatic intro detection — status
 
 - **Chapters: implemented** (`IntroChapterDetector`) and unit-tested. It is read-only
@@ -230,8 +255,9 @@ Tests are now 32 (`IntroSessionTrackerTests` adds 9).
 types):
 
 - `PluginConfiguration`: `Assets`, `Rules`, `MoviesOnly`, `RepeatAfterMinutes` (180).
-- `IntroAsset`: `Id`, `Name`, `FileName` (the stored file under the intros folder),
-  `Enabled`.
+- `IntroAsset`: `Id`, `Name`, `FileName` (the stored file under the intros folder, empty
+  for library assets), `LibraryItemId` (an existing library video, `Guid.Empty` for
+  uploads), `Enabled`.
 - `IntroRule`: `Id`, `Name`, `Enabled`, `LibraryIds`, `UserIds`, `TargetItemIds`
   (active series/movie ids; empty = all), `ExcludedItemIds` (deactivated season/episode
   ids), `IncludeTags`, `ExcludeTags`, `Genres`, `Studios`, `DateRange`,
@@ -247,6 +273,10 @@ route `[controller]` → `/IntroReplacer/...`):
 
 - `GET /Assets`, `POST /Assets` (multipart `file`), `DELETE /Assets/{id}` — the POST
   also ensures the hidden library and triggers a scan.
+- `POST /Assets/FromLibrary/{itemId}` — register an existing library video as an
+  intro (idempotent; never touches the file).
+- `GET /Videos` — every video file in every library, for the "add a video already on
+  the server" picker.
 - `GET /Libraries`, `GET /Users`, `GET /Targets` (series → seasons → episodes tree).
 - `POST /Test/{itemId}?userId=` — evaluate rules without playing.
 

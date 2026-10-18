@@ -84,13 +84,10 @@ public class IntroProvider : IIntroProvider
             }
 
             // A path-only intro is silently dropped by Jellyfin unless the file is a
-            // scanned library item. Make sure the hidden library exists before resolving.
-            if (!plugin.IntroLibrary.Exists())
-            {
-                await plugin.IntroLibrary.EnsureAsync().ConfigureAwait(false);
-            }
-
+            // scanned library item. Make sure the hidden library exists before
+            // resolving uploaded files (library-picked intros are already items).
             var intros = new List<IntroInfo>();
+            var libraryEnsured = false;
             foreach (var assetId in selection.AssetIds)
             {
                 var asset = configuration.Assets.FirstOrDefault(a => a.Id == assetId);
@@ -99,11 +96,40 @@ public class IntroProvider : IIntroProvider
                     continue;
                 }
 
+                if (asset.LibraryItemId != Guid.Empty)
+                {
+                    // An existing library video used as the intro: the item is already
+                    // scanned, so its path + id resolve directly.
+                    if (_libraryManager.GetItemById(asset.LibraryItemId) is Video video &&
+                        !string.IsNullOrEmpty(video.Path))
+                    {
+                        intros.Add(new IntroInfo { Path = video.Path, ItemId = video.Id });
+                    }
+                    else
+                    {
+                        _logger.LogWarning(
+                            "Intro asset {AssetName} points at a library item ({ItemId}) that no longer exists",
+                            asset.Name,
+                            asset.LibraryItemId);
+                    }
+
+                    continue;
+                }
+
                 var path = plugin.AssetStore.ResolvePath(asset);
                 if (path is null)
                 {
                     _logger.LogWarning("Intro asset {AssetName} is missing on disk", asset.Name);
                     continue;
+                }
+
+                if (!libraryEnsured)
+                {
+                    libraryEnsured = true;
+                    if (!plugin.IntroLibrary.Exists())
+                    {
+                        await plugin.IntroLibrary.EnsureAsync().ConfigureAwait(false);
+                    }
                 }
 
                 var libraryItem = plugin.IntroLibrary.FindItem(path);

@@ -66,10 +66,16 @@ public class IntroReplacerController : ControllerBase
             a.Id,
             a.Name,
             a.Enabled,
-            Plugin.AssetStore.ResolvePath(a) is not null));
+            AssetExists(a),
+            a.LibraryItemId == Guid.Empty ? "Uploaded" : "Library"));
 
         return Ok(result);
     }
+
+    private bool AssetExists(IntroAsset asset)
+        => asset.LibraryItemId != Guid.Empty
+            ? _libraryManager.GetItemById(asset.LibraryItemId) is Video
+            : Plugin.AssetStore.ResolvePath(asset) is not null;
 
     /// <summary>
     /// Uploads a new intro file and registers it as an asset.
@@ -111,11 +117,113 @@ public class IntroReplacerController : ControllerBase
         await Plugin.IntroLibrary.EnsureAsync().ConfigureAwait(false);
 
         _logger.LogInformation("Uploaded intro asset {Name} ({File})", asset.Name, storedName);
-        return Ok(new IntroAssetDto(asset.Id, asset.Name, asset.Enabled, true));
+        return Ok(new IntroAssetDto(asset.Id, asset.Name, asset.Enabled, true, "Uploaded"));
     }
 
     /// <summary>
-    /// Deletes an asset and its file.
+    /// Registers an existing library video as an intro asset. The media file is never
+    /// copied or modified; the plugin only remembers the item id.
+    /// </summary>
+    /// <param name="itemId">The id of the library video to use as an intro.</param>
+    /// <returns>The created (or already registered) asset.</returns>
+    [HttpPost("Assets/FromLibrary/{itemId}")]
+    [ProducesResponseType(StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public ActionResult<IntroAssetDto> AddLibraryAsset([FromRoute] Guid itemId)
+    {
+        var item = _libraryManager.GetItemById(itemId);
+        if (item is null)
+        {
+            return NotFound();
+        }
+
+        if (item is not Video video || string.IsNullOrEmpty(video.Path))
+        {
+            return BadRequest("The selected item is not a playable video file.");
+        }
+
+        var existing = Plugin.Configuration.Assets.FirstOrDefault(a => a.LibraryItemId == itemId);
+        if (existing is not null)
+        {
+            return Ok(new IntroAssetDto(existing.Id, existing.Name, existing.Enabled, true, "Library"));
+        }
+
+        var asset = new IntroAsset
+        {
+            Id = Guid.NewGuid(),
+            Name = Describe(item),
+            LibraryItemId = itemId,
+            Enabled = true
+        };
+
+        Plugin.Configuration.Assets.Add(asset);
+        Plugin.SaveConfiguration();
+
+        _logger.LogInformation("Registered library video {Name} ({ItemId}) as an intro", asset.Name, itemId);
+        return Ok(new IntroAssetDto(asset.Id, asset.Name, asset.Enabled, true, "Library"));
+    }
+
+    /// <summary>
+    /// Lists every video file in every library, so an existing video can be picked as
+    /// an intro. The plugin's own hidden intro library is excluded.
+    /// </summary>
+    /// <returns>The candidates, ordered by label.</returns>
+    [HttpGet("Videos")]
+    [ProducesResponseType(StatusCodes.Status200OK)]
+    public ActionResult<IEnumerable<VideoCandidateDto>> GetVideos()
+    {
+        var introLibraryId = Plugin.IntroLibrary.GetLibraryItemId();
+
+        var items = _libraryManager.GetItemsResult(new InternalItemsQuery
+        {
+            IncludeItemTypes = new[]
+            {
+                BaseItemKind.Movie,
+                BaseItemKind.Episode,
+                BaseItemKind.Video,
+                BaseItemKind.MusicVideo,
+                BaseItemKind.Trailer
+            },
+            Recursive = true,
+            IsVirtualItem = false
+        }).Items;
+
+        var candidates = items
+            .Where(i => i is Video && !string.IsNullOrEmpty(i.Path))
+            .Where(i => introLibraryId is null
+                        || !_libraryManager.GetCollectionFolders(i).Any(f => f.Id == introLibraryId))
+            .Select(i => new VideoCandidateDto(i.Id, Describe(i), i.GetBaseItemKind().ToString()))
+            .OrderBy(c => c.Label, StringComparer.OrdinalIgnoreCase)
+            .ToList();
+
+        return Ok(candidates);
+    }
+
+    private static string Describe(BaseItem item)
+    {
+        switch (item)
+        {
+            case Episode episode:
+                var series = episode.SeriesName;
+                var season = episode.ParentIndexNumber;
+                var number = episode.IndexNumber;
+                var code = season.HasValue || number.HasValue
+                    ? $"S{(season ?? 0):00}E{(number ?? 0):00}"
+                    : string.Empty;
+                return string.Join(
+                    " ",
+                    new[] { series, code, episode.Name }.Where(s => !string.IsNullOrWhiteSpace(s)));
+            case Movie movie:
+                return movie.ProductionYear is int year ? $"{movie.Name} ({year})" : movie.Name;
+            default:
+                return item.Name;
+        }
+    }
+
+    /// <summary>
+    /// Deletes an asset. Only files uploaded into the plugin's folder are removed;
+    /// assets that point at an existing library video are just unregistered.
     /// </summary>
     /// <param name="id">The asset id.</param>
     /// <returns>No content.</returns>
@@ -279,8 +387,15 @@ public class IntroReplacerController : ControllerBase
 /// <param name="Id">Asset id.</param>
 /// <param name="Name">Display name.</param>
 /// <param name="Enabled">Whether enabled.</param>
-/// <param name="Exists">Whether the file exists on disk.</param>
-public record IntroAssetDto(Guid Id, string Name, bool Enabled, bool Exists);
+/// <param name="Exists">Whether the source file/item still exists.</param>
+/// <param name="Source">Where the intro comes from: <c>Uploaded</c> or <c>Library</c>.</param>
+public record IntroAssetDto(Guid Id, string Name, bool Enabled, bool Exists, string Source);
+
+/// <summary>A library video that can be used as an intro.</summary>
+/// <param name="Id">Item id.</param>
+/// <param name="Label">Human readable label (series/episode code, movie year, …).</param>
+/// <param name="Type">Item type name.</param>
+public record VideoCandidateDto(Guid Id, string Label, string Type);
 
 /// <summary>Library representation.</summary>
 /// <param name="Id">Library id.</param>

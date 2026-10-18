@@ -32,13 +32,22 @@
 
             <h3>Intro files</h3>
             <p class="fieldDescription">
-                Uploaded videos are stored in the plugin data folder and can be picked in rules below.
+                Upload a video, or pick any video already in your libraries. Nothing is copied or modified.
             </p>
             <div class="inputContainer">
                 <input id="uploadFile" type="file" accept="video/*" />
                 <button id="uploadBtn" is="emby-button" type="button" class="raised emby-button">
                     <span>Upload intro</span>
                 </button>
+            </div>
+            <div class="inputContainer">
+                <label class="inputLabel inputLabelUnfocused" for="videoFilter">Add a video already on the server</label>
+                <input id="videoFilter" is="emby-input" type="text" placeholder="Filter by name" />
+                <select id="videoSelect" is="emby-select"></select>
+                <button id="addVideoBtn" is="emby-button" type="button" class="raised emby-button">
+                    <span>Add as intro</span>
+                </button>
+                <div id="videoHint" class="fieldDescription"></div>
             </div>
             <div id="assetList"></div>
 
@@ -63,13 +72,21 @@
             let libraries = [];
             let users = [];
             let targets = [];
+            let videos = [];
             let assetExists = {};
+
+            // Open/closed state of the collapsible rule cards and target lists,
+            // keyed by rule id so it survives re-renders.
+            const openState = {};
 
             const api = (path) => ApiClient.getUrl('IntroReplacer' + path);
             const token = () => ApiClient.accessToken ? ApiClient.accessToken() : '';
 
+            const guid = () => ([1e7] + -1e3 + -4e3 + -8e3 + -1e11).replace(/[018]/g, c =>
+                (c ^ crypto.getRandomValues(new Uint8Array(1))[0] & 15 >> c / 4).toString(16));
+
             const newRule = () => ({
-                Id: '00000000-0000-0000-0000-000000000000',
+                Id: guid(),
                 Name: 'New rule',
                 Enabled: true,
                 LibraryIds: [],
@@ -93,27 +110,74 @@
 
             const load = async () => {
                 Dashboard.showLoadingMsg();
-                const [cfg, libs, usrs, tree, assets] = await Promise.all([
+                const [cfg, libs, usrs, tree, assets, vids] = await Promise.all([
                     ApiClient.getPluginConfiguration(pluginId),
                     ApiClient.getJSON(api('/Libraries')),
                     ApiClient.getJSON(api('/Users')),
                     ApiClient.getJSON(api('/Targets')),
-                    ApiClient.getJSON(api('/Assets'))
+                    ApiClient.getJSON(api('/Assets')),
+                    ApiClient.getJSON(api('/Videos'))
                 ]);
                 config = cfg;
                 config.Rules = config.Rules || [];
                 config.Assets = config.Assets || [];
+                // Rules saved before collapsible cards existed have no unique id; give
+                // them one so the open/closed state can be tracked per rule.
+                config.Rules.forEach(r => {
+                    if (!r.Id || r.Id === '00000000-0000-0000-0000-000000000000') r.Id = guid();
+                });
                 libraries = libs || [];
                 users = usrs || [];
                 targets = tree || [];
+                videos = vids || [];
                 assetExists = {};
                 (assets || []).forEach(a => { assetExists[a.Id] = a.Exists; });
 
                 document.querySelector('#moviesOnly').checked = !!config.MoviesOnly;
                 document.querySelector('#repeatAfterMinutes').value = config.RepeatAfterMinutes || 180;
+                renderVideoSelect();
                 renderAssets();
                 renderRules();
                 Dashboard.hideLoadingMsg();
+            };
+
+            // ---------- existing library videos ----------
+            const renderVideoSelect = () => {
+                const sel = document.querySelector('#videoSelect');
+                const filter = (document.querySelector('#videoFilter').value || '').trim().toLowerCase();
+                const matches = videos.filter(v => !filter || v.Label.toLowerCase().includes(filter));
+                const shown = matches.slice(0, 500);
+
+                sel.innerHTML = '';
+                if (shown.length === 0) {
+                    const opt = document.createElement('option');
+                    opt.value = '';
+                    opt.textContent = videos.length === 0
+                        ? 'No videos found in your libraries'
+                        : 'Nothing matches that filter';
+                    sel.appendChild(opt);
+                } else {
+                    shown.forEach(v => {
+                        const opt = document.createElement('option');
+                        opt.value = v.Id;
+                        opt.textContent = v.Label + '  [' + v.Type + ']';
+                        sel.appendChild(opt);
+                    });
+                }
+
+                document.querySelector('#videoHint').textContent = matches.length > shown.length
+                    ? 'Showing ' + shown.length + ' of ' + matches.length + ' matches — type more to narrow it down.'
+                    : matches.length + ' of ' + videos.length + ' videos.';
+            };
+
+            const addLibraryVideo = () => {
+                const sel = document.querySelector('#videoSelect');
+                if (!sel.value) return;
+                Dashboard.showLoadingMsg();
+                fetch(api('/Assets/FromLibrary/' + sel.value), {
+                    method: 'POST',
+                    headers: { 'X-Emby-Token': token() }
+                }).then(() => load()).catch(() => Dashboard.hideLoadingMsg());
             };
 
             // ---------- assets ----------
@@ -121,7 +185,7 @@
                 const host = document.querySelector('#assetList');
                 host.innerHTML = '';
                 if (config.Assets.length === 0) {
-                    host.innerHTML = '<p class="fieldDescription">No intro files uploaded yet.</p>';
+                    host.innerHTML = '<p class="fieldDescription">No intro videos yet. Upload one or add a library video above.</p>';
                     return;
                 }
                 config.Assets.forEach(asset => {
@@ -135,7 +199,11 @@
                     cb.addEventListener('change', () => { asset.Enabled = cb.checked; });
                     label.appendChild(cb);
                     const name = document.createElement('span');
-                    name.textContent = asset.Name + (assetExists[asset.Id] ? '' : ' (file missing)');
+                    name.textContent = asset.Name
+                        + (asset.LibraryItemId && asset.LibraryItemId !== '00000000-0000-0000-0000-000000000000'
+                            ? ' (from a library)'
+                            : '')
+                        + (assetExists[asset.Id] ? '' : ' (missing)');
                     label.appendChild(name);
                     row.appendChild(label);
                     const del = document.createElement('button');
@@ -223,18 +291,34 @@
                 rule.LibraryIds = rule.LibraryIds || [];
                 rule.AssetIds = rule.AssetIds || [];
 
-                const card = document.createElement('div');
-                card.className = 'inputContainer';
+                const card = document.createElement('details');
                 card.style.border = '1px solid rgba(255,255,255,0.15)';
                 card.style.padding = '1em';
                 card.style.margin = '1em 0';
+                card.open = openState[rule.Id] !== false;
+                card.addEventListener('toggle', () => { openState[rule.Id] = card.open; });
 
-                const header = document.createElement('div');
-                header.innerHTML = '<strong>Rule ' + (index + 1) + '</strong>';
-                card.appendChild(header);
+                const summary = document.createElement('summary');
+                summary.style.cursor = 'pointer';
 
-                card.appendChild(field('Name', textInput(rule.Name, v => rule.Name = v)));
-                card.appendChild(checkbox('Enabled', rule.Enabled, v => rule.Enabled = v));
+                const title = document.createElement('strong');
+                const updateTitle = () => {
+                    title.textContent = 'Rule ' + (index + 1) + ' — ' + (rule.Name || 'Untitled');
+                    title.style.opacity = rule.Enabled ? '1' : '0.5';
+                };
+                updateTitle();
+                summary.appendChild(title);
+
+                const enabled = checkbox('Enabled', rule.Enabled, v => { rule.Enabled = v; updateTitle(); });
+                enabled.style.display = 'inline-block';
+                enabled.style.marginLeft = '1.5em';
+                // Keep clicks on the checkbox from collapsing/expanding the rule.
+                enabled.addEventListener('click', e => e.stopPropagation());
+                summary.appendChild(enabled);
+
+                card.appendChild(summary);
+
+                card.appendChild(field('Name', textInput(rule.Name, v => { rule.Name = v; updateTitle(); })));
 
                 // libraries
                 const libWrap = document.createElement('div');
@@ -260,12 +344,36 @@
                 if (users.length === 0) userWrap.innerHTML = '<p class="fieldDescription">No users found.</p>';
                 card.appendChild(field('Active for users (empty = all)', userWrap));
 
-                // target tree
+                // target tree (collapsible: it is the longest part of a rule)
+                const targetBox = document.createElement('details');
+                targetBox.style.border = '1px solid rgba(255,255,255,0.1)';
+                targetBox.style.padding = '0.5em';
+                targetBox.style.margin = '0.5em 0';
+                targetBox.open = openState[rule.Id + ':targets'] === true;
+                targetBox.addEventListener('toggle', () => {
+                    openState[rule.Id + ':targets'] = targetBox.open;
+                    if (targetBox.open) ensureTree();
+                });
+
+                const targetSummary = document.createElement('summary');
+                targetSummary.style.cursor = 'pointer';
+                targetSummary.textContent = 'Targets';
+                const targetSummaryInfo = document.createElement('span');
+                targetSummaryInfo.style.opacity = '0.7';
+                targetSummary.appendChild(targetSummaryInfo);
+
+                const updateTargetSummary = () => {
+                    const active = targets.filter(t => rule.TargetItemIds.includes(t.Id)).length;
+                    const excluded = rule.ExcludedItemIds.length;
+                    targetSummaryInfo.textContent = ' — ' + (active === 0
+                        ? 'all items'
+                        : active + ' selected' + (excluded > 0 ? ', ' + excluded + ' excluded' : ''));
+                };
+
                 const treeHost = document.createElement('div');
                 treeHost.style.maxHeight = '22em';
                 treeHost.style.overflow = 'auto';
-                treeHost.style.border = '1px solid rgba(255,255,255,0.1)';
-                treeHost.style.padding = '0.5em';
+                treeHost.style.marginTop = '0.5em';
                 const treeHeading = document.createElement('div');
                 treeHeading.className = 'fieldDescription';
                 treeHeading.textContent = 'Series/movies targeted (empty = all). Activating a series activates all its seasons and episodes.';
@@ -275,10 +383,19 @@
 
                 const refreshTree = () => {
                     treeBody.innerHTML = '';
-                    targets.forEach(node => treeBody.appendChild(renderTargetNode(rule, node, refreshTree)));
+                    targets.forEach(node => treeBody.appendChild(renderTargetNode(rule, node, refreshTree, updateTargetSummary)));
+                    updateTargetSummary();
                 };
-                refreshTree();
-                card.appendChild(field('Targets', treeHost));
+                // Only build the (potentially large) tree once the section is opened.
+                const ensureTree = () => {
+                    if (treeBody.childElementCount === 0) refreshTree();
+                };
+                updateTargetSummary();
+                if (targetBox.open) ensureTree();
+
+                targetBox.appendChild(targetSummary);
+                targetBox.appendChild(treeHost);
+                card.appendChild(targetBox);
 
                 card.appendChild(field('Include tags (comma separated)', textInput(csv(rule.IncludeTags), v => rule.IncludeTags = parseCsv(v))));
                 card.appendChild(field('Exclude tags (comma separated)', textInput(csv(rule.ExcludeTags), v => rule.ExcludeTags = parseCsv(v))));
@@ -356,7 +473,7 @@
                 return card;
             };
 
-            const renderTargetNode = (rule, node, refresh) => {
+            const renderTargetNode = (rule, node, refresh, updateSummary) => {
                 const wrap = document.createElement('div');
                 wrap.style.paddingLeft = '1em';
 
@@ -408,12 +525,14 @@
                         (season.Children || []).forEach(ep => {
                             const epWrap = document.createElement('div');
                             epWrap.style.paddingLeft = '1.5em';
-                            epWrap.appendChild(checkbox(ep.Name, !rule.ExcludedItemIds.includes(ep.Id), on => {
+                            const epLabel = (ep.Index != null ? ep.Index + '. ' : '') + ep.Name;
+                            epWrap.appendChild(checkbox(epLabel, !rule.ExcludedItemIds.includes(ep.Id), on => {
                                 if (on) {
                                     rule.ExcludedItemIds = rule.ExcludedItemIds.filter(id => id !== ep.Id);
                                 } else {
                                     rule.ExcludedItemIds = [...new Set([...rule.ExcludedItemIds, ep.Id])];
                                 }
+                                updateSummary();
                             }));
                             seasonWrap.appendChild(epWrap);
                         });
@@ -462,6 +581,8 @@
                 renderRules();
             });
             document.querySelector('#uploadBtn').addEventListener('click', upload);
+            document.querySelector('#addVideoBtn').addEventListener('click', addLibraryVideo);
+            document.querySelector('#videoFilter').addEventListener('input', renderVideoSelect);
             document.querySelector('#saveBtn').addEventListener('click', save);
 
             load();

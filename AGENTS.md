@@ -109,7 +109,7 @@ docker compose -f docker/compose.yaml up -d                          # then rest
 - `Services/IntroSegmentProvider.cs` — `IMediaSegmentProvider` exposing the chapter-based Intro segment.
 - `Services/IntroSegmentHelper.cs` — applies `Replace`/`Prepend` to `Intro` media segments.
 - `Services/IntroSessionTracker.cs` — intro-repeat bookkeeping (wait-time + once-per-session); pure, unit-tested, no Jellyfin types.
-- `Api/IntroReplacerController.cs` — REST: `/IntroReplacer/Assets` (list/upload/delete), `/Libraries`, `/Users`, `/Targets` (series/season/episode tree), `/Test/{itemId}`.
+- `Api/IntroReplacerController.cs` — REST: `/IntroReplacer/Assets` (list/upload/delete), `/IntroReplacer/Assets/FromLibrary/{itemId}` (use an existing library video as an intro), `/Videos` (every video in every library, for that picker), `/Libraries`, `/Users`, `/Targets` (series/season/episode tree), `/Test/{itemId}`.
 - `Configuration/config.html` — dashboard page. Inline `<script>` (no external controller file); talks to the endpoints above and to Jellyfin's standard `get/updatePluginConfiguration`.
 
 ## Conventions
@@ -122,6 +122,12 @@ docker compose -f docker/compose.yaml up -d                          # then rest
   (empty = all items), `ExcludedItemIds` holds deactivated season/episode ids.
   Matching runs against the item's ancestor chain, so excluding a season excludes
   its episodes. The config UI maintains these two lists from the target tree.
+- Intro assets are either **uploaded files** (`FileName`, stored in the plugin folder,
+  scanned through the hidden library) or **existing library videos**
+  (`LibraryItemId`, resolved with `ILibraryManager.GetItemById`). Always branch on
+  `LibraryItemId != Guid.Empty` before touching the asset store: a library asset has an
+  empty `FileName`, and deleting it must only unregister it — never delete the user's
+  media.
 - The hidden `Intro Replacer` library and its intro clips must never show up in the
   config UI. `GET /Libraries` and `GET /Targets` filter it out using
   `IntroLibraryManager.GetLibraryItemId()` (targets via

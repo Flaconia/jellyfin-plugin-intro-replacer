@@ -20,6 +20,9 @@ Local Intros plugin).
   **hidden internal library** (`Intro Replacer`), hidden from every user's home. This
   is required: Jellyfin silently drops intro files that are not scanned library
   items. No media files are rewritten or duplicated.
+- You can also use **any video already in your libraries** (movies, episodes, other
+  videos) as an intro — nothing is copied or modified. Deleting such an intro only
+  removes it from the plugin's list, never the media file.
 - For **Replace**, if the item has no `Intro` media segment yet, one is derived from
   its chapters (e.g. a "Opening"/"Sigla d'apertura" chapter) so clients offer to
   skip the original intro. Existing segments (e.g. from Intro Skipper) are kept.

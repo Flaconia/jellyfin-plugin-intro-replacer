@@ -11,7 +11,8 @@ namespace Jellyfin.Plugin.IntroReplacer.Configuration;
 public class PluginConfiguration : BasePluginConfiguration
 {
     /// <summary>
-    /// Gets or sets the registered intro files (stored in the plugin data folder).
+    /// Gets or sets the registered intro videos: files uploaded into the plugin's
+    /// folder, or existing library items picked by the administrator.
     /// </summary>
     public List<IntroAsset> Assets { get; set; } = new();
 
@@ -43,8 +44,17 @@ public class IntroAsset
     /// <summary>Gets or sets the display name.</summary>
     public string Name { get; set; } = string.Empty;
 
-    /// <summary>Gets or sets the file name relative to the plugin's intros folder.</summary>
+    /// <summary>
+    /// Gets or sets the file name relative to the plugin's intros folder. Empty when
+    /// the asset points at an existing library video (see <see cref="LibraryItemId"/>).
+    /// </summary>
     public string FileName { get; set; } = string.Empty;
+
+    /// <summary>
+    /// Gets or sets the id of an existing library video used as the intro, or
+    /// <see cref="Guid.Empty"/> for a file uploaded into the plugin's folder.
+    /// </summary>
+    public Guid LibraryItemId { get; set; }
 
     /// <summary>Gets or sets a value indicating whether the asset can be selected.</summary>
     public bool Enabled { get; set; } = true;
