@@ -55,14 +55,23 @@ public class IntroReplacerController : ControllerBase
         IntroReplacerPlugin.Instance ?? throw new InvalidOperationException("Plugin not initialized");
 
     /// <summary>
-    /// Lists registered intro assets and whether their file exists on disk.
+    /// Lists registered intro assets and whether their file exists on disk. Files
+    /// dropped into the intro folder are registered automatically on this call.
     /// </summary>
     /// <returns>The assets.</returns>
     [HttpGet("Assets")]
     [ProducesResponseType(StatusCodes.Status200OK)]
-    public ActionResult<IEnumerable<IntroAssetDto>> GetAssets()
+    public async Task<ActionResult<IEnumerable<IntroAssetDto>>> GetAssets()
     {
-        var result = Plugin.Configuration.Assets.Select(a => new IntroAssetDto(
+        var config = Plugin.Configuration;
+        if (Plugin.AssetStore.ScanForNewFiles(config))
+        {
+            Plugin.SaveConfiguration();
+            await Plugin.IntroLibrary.EnsureAsync().ConfigureAwait(false);
+            _libraryManager.QueueLibraryScan();
+        }
+
+        var result = config.Assets.Select(a => new IntroAssetDto(
             a.Id,
             a.Name,
             AssetExists(a),
@@ -75,6 +84,100 @@ public class IntroReplacerController : ControllerBase
         => asset.LibraryItemId != Guid.Empty
             ? _libraryManager.GetItemById(asset.LibraryItemId) is Video
             : Plugin.AssetStore.ResolvePath(asset) is not null;
+
+    /// <summary>
+    /// Returns the intro folder that is currently in use.
+    /// </summary>
+    /// <returns>The configured and effective folder.</returns>
+    [HttpGet("IntroFolder")]
+    [ProducesResponseType(StatusCodes.Status200OK)]
+    public ActionResult<IntroFolderDto> GetIntroFolder()
+    {
+        return Ok(new IntroFolderDto(
+            Plugin.Configuration.IntroFolder ?? string.Empty,
+            Plugin.AssetStore.Directory,
+            IntroAssetStore.PathsEqual(Plugin.AssetStore.Directory, Plugin.AssetStore.DefaultDirectory)));
+    }
+
+    /// <summary>
+    /// Moves the intro files to a new folder, re-points the hidden library and saves
+    /// the configuration. An empty path restores the plugin's own folder.
+    /// </summary>
+    /// <param name="request">The requested folder.</param>
+    /// <returns>The effective folder.</returns>
+    [HttpPost("IntroFolder")]
+    [ProducesResponseType(StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    public async Task<ActionResult<IntroFolderDto>> SetIntroFolder([FromBody] IntroFolderRequest? request)
+    {
+        var requested = request?.Path?.Trim();
+        var target = string.IsNullOrEmpty(requested)
+            ? Plugin.AssetStore.DefaultDirectory
+            : requested;
+
+        if (!Path.IsPathFullyQualified(target))
+        {
+            return BadRequest("Use an absolute folder path (for example /mnt/media/intros).");
+        }
+
+        try
+        {
+            target = Path.GetFullPath(target);
+            Directory.CreateDirectory(target);
+
+            // Fail early when the folder is not writable.
+            var probe = Path.Combine(target, ".introreplacer-write-test");
+            await System.IO.File.WriteAllTextAsync(probe, string.Empty).ConfigureAwait(false);
+            System.IO.File.Delete(probe);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Intro Replacer: intro folder {Path} is not usable", target);
+            return BadRequest("That folder cannot be written to. Create it or pick another one.");
+        }
+
+        var config = Plugin.Configuration;
+        int moved;
+        try
+        {
+            moved = Plugin.AssetStore.MoveAll(target, config);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Intro Replacer: failed to move intro files to {Path}", target);
+            return BadRequest("Could not move the existing intro files to that folder.");
+        }
+
+        try
+        {
+            Plugin.AssetStore.SetDirectory(target);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Intro Replacer: failed to use intro folder {Path}", target);
+            return BadRequest("That folder cannot be used.");
+        }
+
+        config.IntroFolder = IntroAssetStore.PathsEqual(target, Plugin.AssetStore.DefaultDirectory)
+            ? string.Empty
+            : target;
+        // Files dropped into the new folder become assets too.
+        Plugin.AssetStore.ScanForNewFiles(config);
+        Plugin.SaveConfiguration();
+
+        await Plugin.IntroLibrary.RecreateAsync().ConfigureAwait(false);
+        _libraryManager.QueueLibraryScan();
+
+        _logger.LogInformation(
+            "Intro Replacer: intro folder set to {Path} ({Moved} file(s) moved)",
+            Plugin.AssetStore.Directory,
+            moved);
+
+        return Ok(new IntroFolderDto(
+            config.IntroFolder,
+            Plugin.AssetStore.Directory,
+            IntroAssetStore.PathsEqual(Plugin.AssetStore.Directory, Plugin.AssetStore.DefaultDirectory)));
+    }
 
     /// <summary>
     /// Uploads a new intro file and registers it as an asset.
@@ -113,6 +216,7 @@ public class IntroReplacerController : ControllerBase
         // Register the intro folder as a (hidden) library so the new file becomes
         // a playable item, then trigger a scan so it is resolvable right away.
         await Plugin.IntroLibrary.EnsureAsync().ConfigureAwait(false);
+        _libraryManager.QueueLibraryScan();
 
         _logger.LogInformation("Uploaded intro asset {Name} ({File})", asset.Name, storedName);
         return Ok(new IntroAssetDto(asset.Id, asset.Name, true, "Uploaded"));
@@ -432,3 +536,13 @@ public record TargetNodeDto(
 /// <param name="RuleName">Matched rule name, or null.</param>
 /// <param name="IntroNames">Resolved intro names.</param>
 public record RuleTestResult(string? RuleName, IReadOnlyList<string> IntroNames);
+
+/// <summary>Request to change the intro folder.</summary>
+/// <param name="Path">The new absolute folder; empty restores the default.</param>
+public record IntroFolderRequest(string? Path);
+
+/// <summary>The intro folder in use.</summary>
+/// <param name="Configured">The saved value (empty when using the default folder).</param>
+/// <param name="Effective">The absolute folder that holds the intro files.</param>
+/// <param name="IsDefault">Whether <paramref name="Effective"/> is the plugin's own folder.</param>
+public record IntroFolderDto(string Configured, string Effective, bool IsDefault);

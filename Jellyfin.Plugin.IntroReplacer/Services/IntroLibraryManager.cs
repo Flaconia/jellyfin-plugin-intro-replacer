@@ -36,7 +36,7 @@ public sealed class IntroLibraryManager
     private readonly ILibraryManager _libraryManager;
     private readonly IUserManager _userManager;
     private readonly ILogger<IntroLibraryManager> _logger;
-    private readonly string _rootPath;
+    private readonly IntroAssetStore _assets;
     private readonly SemaphoreSlim _gate = new(1, 1);
 
     /// <summary>
@@ -45,17 +45,17 @@ public sealed class IntroLibraryManager
     /// <param name="libraryManager">Library manager.</param>
     /// <param name="userManager">User manager.</param>
     /// <param name="loggerFactory">Logger factory.</param>
-    /// <param name="rootPath">The folder that holds the intro files.</param>
+    /// <param name="assets">The intro file store (its folder can change at runtime).</param>
     public IntroLibraryManager(
         ILibraryManager libraryManager,
         IUserManager userManager,
         ILoggerFactory loggerFactory,
-        string rootPath)
+        IntroAssetStore assets)
     {
         _libraryManager = libraryManager;
         _userManager = userManager;
         _logger = loggerFactory.CreateLogger<IntroLibraryManager>();
-        _rootPath = rootPath;
+        _assets = assets;
     }
 
     /// <summary>Gets a value indicating whether the hidden library currently exists.</summary>
@@ -92,7 +92,8 @@ public sealed class IntroLibraryManager
     }
 
     /// <summary>
-    /// Creates the hidden library when missing and re-applies the user hiding.
+    /// Creates the hidden library when missing, moves it when the intro folder changed,
+    /// and re-applies the user hiding.
     /// </summary>
     /// <returns>A task.</returns>
     public async Task EnsureAsync()
@@ -100,53 +101,31 @@ public sealed class IntroLibraryManager
         await _gate.WaitAsync().ConfigureAwait(false);
         try
         {
-            if (FindVirtualFolder() is not null)
+            var folder = FindVirtualFolder();
+            if (folder is not null)
             {
-                await HideFromUsersAsync().ConfigureAwait(false);
-                return;
+                var location = folder.Locations?.FirstOrDefault();
+                if (location is null || IntroAssetStore.PathsEqual(location, _assets.Directory))
+                {
+                    await HideFromUsersAsync().ConfigureAwait(false);
+                    return;
+                }
+
+                // The configured folder changed while the server was down.
+                _logger.LogInformation(
+                    "Intro Replacer: hidden intro library points at {OldPath}, moving it to {NewPath}",
+                    location,
+                    _assets.Directory);
+                await _libraryManager.RemoveVirtualFolder(LibraryName, refreshLibrary: false).ConfigureAwait(false);
             }
 
-            if (!Directory.Exists(_rootPath))
+            if (!Directory.Exists(_assets.Directory))
             {
                 // Nothing uploaded yet; the folder is created by the asset store on first upload.
                 return;
             }
 
-            var options = new LibraryOptions
-            {
-                Enabled = true,
-                EnableRealtimeMonitor = false,
-                EnableChapterImageExtraction = false,
-                ExtractChapterImagesDuringLibraryScan = false,
-                EnableTrickplayImageExtraction = false,
-                ExtractTrickplayImagesDuringLibraryScan = false,
-                EnableLUFSScan = false,
-                EnableAutomaticSeriesGrouping = false,
-                EnableEmbeddedTitles = false,
-                EnableEmbeddedExtrasTitles = false,
-                EnableEmbeddedEpisodeInfos = false,
-                EnablePhotos = false,
-                SaveLocalMetadata = false,
-                AutomaticRefreshIntervalDays = 0,
-                PathInfos = new[] { new MediaPathInfo(_rootPath) },
-                // Do not try to match intro clips against online metadata.
-                TypeOptions = new[] { "Movie", "Video" }
-                    .Select(t => new TypeOptions
-                    {
-                        Type = t,
-                        MetadataFetchers = Array.Empty<string>(),
-                        MetadataFetcherOrder = Array.Empty<string>(),
-                        ImageFetchers = Array.Empty<string>(),
-                        ImageFetcherOrder = Array.Empty<string>()
-                    })
-                    .ToArray()
-            };
-
-            _logger.LogInformation("Intro Replacer: creating hidden intro library at {Path}", _rootPath);
-            await _libraryManager
-                .AddVirtualFolder(LibraryName, CollectionTypeOptions.movies, options, refreshLibrary: true)
-                .ConfigureAwait(false);
-
+            await CreateLibraryAsync().ConfigureAwait(false);
             await HideFromUsersAsync().ConfigureAwait(false);
         }
         catch (Exception ex)
@@ -157,6 +136,78 @@ public sealed class IntroLibraryManager
         {
             _gate.Release();
         }
+    }
+
+    /// <summary>
+    /// Rebuilds the hidden library over the store's current folder. Used after the
+    /// administrator changes the intro folder.
+    /// </summary>
+    /// <returns>A task.</returns>
+    public async Task RecreateAsync()
+    {
+        await _gate.WaitAsync().ConfigureAwait(false);
+        try
+        {
+            if (FindVirtualFolder() is not null)
+            {
+                await _libraryManager.RemoveVirtualFolder(LibraryName, refreshLibrary: false).ConfigureAwait(false);
+            }
+
+            if (!Directory.Exists(_assets.Directory))
+            {
+                return;
+            }
+
+            _logger.LogInformation("Intro Replacer: rebuilding the hidden intro library at {Path}", _assets.Directory);
+            await CreateLibraryAsync().ConfigureAwait(false);
+            await HideFromUsersAsync().ConfigureAwait(false);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Intro Replacer: failed to rebuild the hidden intro library");
+        }
+        finally
+        {
+            _gate.Release();
+        }
+    }
+
+    private async Task CreateLibraryAsync()
+    {
+        var options = new LibraryOptions
+        {
+            Enabled = true,
+            EnableRealtimeMonitor = false,
+            EnableChapterImageExtraction = false,
+            ExtractChapterImagesDuringLibraryScan = false,
+            EnableTrickplayImageExtraction = false,
+            ExtractTrickplayImagesDuringLibraryScan = false,
+            EnableLUFSScan = false,
+            EnableAutomaticSeriesGrouping = false,
+            EnableEmbeddedTitles = false,
+            EnableEmbeddedExtrasTitles = false,
+            EnableEmbeddedEpisodeInfos = false,
+            EnablePhotos = false,
+            SaveLocalMetadata = false,
+            AutomaticRefreshIntervalDays = 0,
+            PathInfos = new[] { new MediaPathInfo(_assets.Directory) },
+            // Do not try to match intro clips against online metadata.
+            TypeOptions = new[] { "Movie", "Video" }
+                .Select(t => new TypeOptions
+                {
+                    Type = t,
+                    MetadataFetchers = Array.Empty<string>(),
+                    MetadataFetcherOrder = Array.Empty<string>(),
+                    ImageFetchers = Array.Empty<string>(),
+                    ImageFetcherOrder = Array.Empty<string>()
+                })
+                .ToArray()
+        };
+
+        _logger.LogInformation("Intro Replacer: creating hidden intro library at {Path}", _assets.Directory);
+        await _libraryManager
+            .AddVirtualFolder(LibraryName, CollectionTypeOptions.movies, options, refreshLibrary: true)
+            .ConfigureAwait(false);
     }
 
     /// <summary>
@@ -175,7 +226,7 @@ public sealed class IntroLibraryManager
         try
         {
             return root.GetRecursiveChildren(c => c.Path is not null)
-                .FirstOrDefault(c => PathsEqual(c.Path, fullPath));
+                .FirstOrDefault(c => IntroAssetStore.PathsEqual(c.Path, fullPath));
         }
         catch (Exception ex)
         {
@@ -259,17 +310,5 @@ public sealed class IntroLibraryManager
                 _logger.LogWarning(ex, "Intro Replacer: could not hide the intro library from user {User}", user.Username);
             }
         }
-    }
-
-    private static bool PathsEqual(string? a, string? b)
-    {
-        if (string.IsNullOrEmpty(a) || string.IsNullOrEmpty(b))
-        {
-            return false;
-        }
-
-        static string Normalize(string p) => p.Replace('\\', '/').TrimEnd('/');
-
-        return string.Equals(Normalize(a), Normalize(b), StringComparison.OrdinalIgnoreCase);
     }
 }

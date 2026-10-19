@@ -116,13 +116,13 @@ docker compose -f docker/compose.yaml up -d                          # then rest
 - `Services/RuleEngine.cs` — pure, first-match-wins evaluation (unit-tested; no Jellyfin types).
 - `Services/RuleContext.cs` — primitive snapshot of item metadata (keeps the engine testable).
 - `Services/IntroMatcher.cs` — builds `RuleContext` from a `BaseItem` (merges item + ancestor tags/genres/studios).
-- `Services/IntroAssetStore.cs` — intro files live in `<PluginConfigurationsPath>/IntroReplacer/intros/`.
-- `Services/IntroLibraryManager.cs` — hidden `Intro Replacer` library over the intros folder (create/find/hide).
+- `Services/IntroAssetStore.cs` — intro files live in the configured `IntroFolder` (absolute path) or, by default, `<PluginConfigurationsPath>/IntroReplacer/intros/`. Uploads keep the original (sanitised) file name; dropped files are auto-registered.
+- `Services/IntroLibraryManager.cs` — hidden `Intro Replacer` library over the intros folder (create/find/hide/re-point when the folder changes).
 - `Services/IntroChapterDetector.cs` — chapter → intro range heuristic (unit-tested).
 - `Services/IntroSegmentProvider.cs` — `IMediaSegmentProvider` exposing the chapter-based Intro segment.
 - `Services/IntroSegmentHelper.cs` — applies `Replace`/`Prepend` to `Intro` media segments.
 - `Services/IntroSessionTracker.cs` — intro-repeat bookkeeping (wait-time + once-per-session); pure, unit-tested, no Jellyfin types.
-- `Api/IntroReplacerController.cs` — REST: `/IntroReplacer/Assets` (list/upload/delete), `/IntroReplacer/Assets/FromLibrary/{itemId}` (use an existing library video as an intro), `/Videos` (every video in every library, for that picker), `/Users`, `/Targets` (library → series → seasons → episodes tree, movies as direct library children), `/Test/{itemId}`.
+- `Api/IntroReplacerController.cs` — REST: `/IntroReplacer/Assets` (list/upload/delete), `/IntroReplacer/Assets/FromLibrary/{itemId}` (use an existing library video as an intro), `/IntroReplacer/IntroFolder` (get/set the intro storage folder), `/Videos` (every video in every library, for that picker), `/Users`, `/Targets` (library → series → seasons → episodes tree, movies as direct library children), `/Test/{itemId}`.
 - `Configuration/config.html` — dashboard page. Inline `<script>` (no external controller file); talks to the endpoints above and to Jellyfin's standard `get/updatePluginConfiguration`. Follows the vanilla Control Panel markup (`<form>` limited to 54em, `h1.pageTitle`, `h2.sectionTitle`, `inputContainer`/`checkboxContainer`/`checkboxList`, `raised` buttons, `raised button-submit block` Save); the library-video picker is a hand-built `.dialogContainer > .dialog.formDialog` modal — plugin pages **cannot** `require` `dialogHelper` (no `window.require`/`window.define` in 10.10).
 
 ## Conventions
@@ -135,13 +135,19 @@ docker compose -f docker/compose.yaml up -d                          # then rest
   (empty = all items), `ExcludedItemIds` holds deactivated season/episode ids.
   Matching runs against the item's ancestor chain, so excluding a season excludes
   its episodes. The config UI maintains these two lists from the target tree.
-- Intro assets are either **uploaded files** (`FileName`, stored in the plugin folder,
-  scanned through the hidden library) or **existing library videos**
-  (`LibraryItemId`, resolved with `ILibraryManager.GetItemById`). Always branch on
-  `LibraryItemId != Guid.Empty` before touching the asset store: a library asset has an
-  empty `FileName`, and deleting it must only unregister it — never delete the user's
-  media. There is **no** global enable/disable flag on an asset: the admin list is
-  read-only (name + Remove), and each rule picks the intros it uses via `AssetIds`.
+- Intro assets are either **uploaded files** (`FileName`, stored in the configured
+  `IntroFolder` — default `<PluginConfigurationsPath>/IntroReplacer/intros/` — scanned
+  through the hidden library) or **existing library videos** (`LibraryItemId`, resolved
+  with `ILibraryManager.GetItemById`). Always branch on `LibraryItemId != Guid.Empty`
+  before touching the asset store: a library asset has an empty `FileName`, and deleting
+  it must only unregister it — never delete the user's media. There is **no** global
+  enable/disable flag on an asset: the admin list is read-only (name + Remove), and each
+  rule picks the intros it uses via `AssetIds`.
+- Uploads keep their original (sanitised) base name so the hidden library item — i.e.
+  the title shown while the intro plays — is readable; legacy `<hex>.mp4` names are
+  renamed by `ScanForNewFiles`. `GET /Assets` also auto-registers any supported video
+  dropped into the folder. Changing `IntroFolder` moves the files and rebuilds the
+  hidden library (`RecreateAsync`); 10.10 has no `UpdateVirtualFolderOptions`.
 - The hidden `Intro Replacer` library and its intro clips must never show up in the
   config UI. `GET /Targets` and `GET /Videos` filter it out using
   `IntroLibraryManager.GetLibraryItemId()` (one query per virtual folder, skipping the

@@ -42,9 +42,22 @@ public class IntroReplacerPlugin : BasePlugin<PluginConfiguration>, IHasWebPages
         Instance = this;
         LibraryManager = libraryManager;
         AssetStore = new IntroAssetStore(applicationPaths.PluginConfigurationsPath);
+        try
+        {
+            AssetStore.SetDirectory(Configuration.IntroFolder);
+        }
+        catch (Exception ex)
+        {
+            // Keep the configured path: the drive may simply be unmounted right now.
+            loggerFactory.CreateLogger<IntroReplacerPlugin>().LogError(
+                ex,
+                "Intro Replacer: the configured intro folder {Path} is not reachable right now",
+                Configuration.IntroFolder);
+        }
+
         SessionTracker = new IntroSessionTracker();
         sessionManager.SessionEnded += (_, e) => SessionTracker.NotifySessionEnded(e.SessionInfo?.Id);
-        IntroLibrary = new IntroLibraryManager(libraryManager, userManager, loggerFactory, AssetStore.Directory);
+        IntroLibrary = new IntroLibraryManager(libraryManager, userManager, loggerFactory, AssetStore);
     }
 
     /// <summary>Gets the current plugin instance.</summary>

@@ -331,6 +331,30 @@ Tests are now 32 (`IntroSessionTrackerTests` adds 9).
    exclusions) and clears it, so unchecking a library now hides its whole subtree exactly
    like a series/season. Test: `ExcludedLibraryBlocksItsItems`.
 
+## 3i. Session 10 notes — readable intro names, configurable folder
+
+1. **Uploads keep their original file name.** `IntroAssetStore.Save` used to write
+   `<guid>.mp4`, which Jellyfin showed as the item title while the intro played. It now
+   sanitises `Path.GetFileNameWithoutExtension(original)` and adds ` (n)` only on a
+   collision, so the hidden library item (and the player's title bar) shows the readable
+   name. `ScanForNewFiles` also renames legacy 32-hex uploads to `IntroAsset.Name` once,
+   then queues a library scan.
+2. **The intro folder is configurable.** `PluginConfiguration.IntroFolder` (empty =
+   the plugin's own `IntroReplacer/intros`). The Intro files section shows an absolute-path
+   field plus **Change folder**; `POST /IntroFolder` validates writability, moves every
+   supported file, updates `FileName` on collisions, saves the config, and rebuilds the
+   hidden library over the new path (`IntroLibraryManager.RecreateAsync`, since 10.10 has
+   no `UpdateVirtualFolderOptions`). `EnsureAsync` also re-points the library if the
+   configured path changed while the server was down. Move failures roll back.
+3. **Files dropped into the folder are auto-registered.** `GET /Assets` runs
+   `IntroAssetStore.ScanForNewFiles` first: every supported top-level video not already
+   an asset becomes one (`Name` = file name, `FileName` = file). If anything changed it
+   saves the config, ensures the library and queues a scan. No manual "scan" button.
+4. **Targets and Tags share the prominent frame.** `.ir-tags` now carries the same
+   border / darker `rgba(0,0,0,.25)` surface / 1.25em bold title as `.ir-targets`. The
+   empty `selectLabel` inside the compact intro rows is hidden and the dropdown arrow is
+   centred on the select (`top: 50%; translateY(-50%)`), fixing the slightly low arrows.
+
 ## 4. Automatic intro detection — status
 
 - **Chapters: implemented** (`IntroChapterDetector`) and unit-tested. It is read-only
@@ -349,10 +373,11 @@ Tests are now 32 (`IntroSessionTrackerTests` adds 9).
 `Configuration/PluginConfiguration.cs` (XML-serialised — keep it to simple settable
 types):
 
-- `PluginConfiguration`: `Assets`, `Rules`, `MoviesOnly`.
-- `IntroAsset`: `Id`, `Name`, `FileName` (the stored file under the intros folder, empty
-  for library assets), `LibraryItemId` (an existing library video, `Guid.Empty` for
-  uploads).
+- `PluginConfiguration`: `Assets`, `Rules`, `MoviesOnly`, `IntroFolder` (empty =
+  the plugin's own folder; otherwise an absolute path on any drive).
+- `IntroAsset`: `Id`, `Name` (display name; also the source of the file name for
+  uploads), `FileName` (the stored file under the intro folder, empty for library
+  assets), `LibraryItemId` (an existing library video, `Guid.Empty` for uploads).
 - `IntroRule`: `Id`, `Name`, `Enabled`, `LibraryIds` (legacy include-list, empty = all
   libraries), `ExcludedLibraryIds` (libraries left out; all active by default),
   `UserIds`, `TargetItemIds`
@@ -370,7 +395,14 @@ REST (`Api/IntroReplacerController.cs`, `[Authorize(Policy = RequiresElevation)]
 route `[controller]` → `/IntroReplacer/...`):
 
 - `GET /Assets`, `POST /Assets` (multipart `file`), `DELETE /Assets/{id}` — the POST
-  also ensures the hidden library and triggers a scan.
+  also ensures the hidden library and triggers a scan. `GET /Assets` first registers
+  any supported video dropped into the intro folder (and renames legacy hash-named
+  uploads), then scans when something changed.
+- `GET /IntroFolder`, `POST /IntroFolder` (`{ "Path": "…" }`, empty = default) — moves
+  the existing intro files to the new folder, saves `IntroFolder`, rebuilds the hidden
+  library over it and scans. Rejects relative or unwritable paths. The config page's
+  "Change folder" button calls this immediately; the folder is not part of the normal
+  Save.
 - `POST /Assets/FromLibrary/{itemId}` — register an existing library video as an
   intro (idempotent; never touches the file).
 - `GET /Videos` — every video file in every library, for the "add a video already on

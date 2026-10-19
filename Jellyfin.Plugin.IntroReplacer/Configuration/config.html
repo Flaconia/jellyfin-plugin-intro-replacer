@@ -93,6 +93,12 @@
             padding: 0.2em 0;
         }
 
+        .ir-folderButton {
+            flex: 0 0 auto;
+            align-self: flex-end;
+            margin: 0 0 0 0.5em !important;
+        }
+
         .ir-assetRow > .ir-assetName {
             flex-grow: 1;
             margin-right: 0.5em;
@@ -179,26 +185,40 @@
             margin: 0 0 0 0.5em;
         }
 
-        /* Targets is the longest, most important part of a rule: frame it and
-           darken its surface so it stands out from the card. */
-        .ir-targets {
+        /* The row selects have no label, so hide the empty one; the arrow then needs
+           to be centred on the select instead of sitting below it. */
+        .ir-introRow > .selectContainer > .selectLabel {
+            display: none;
+        }
+
+        .ir-introRow > .selectContainer > .selectArrowContainer {
+            top: 50%;
+            transform: translateY(-50%);
+        }
+
+        .ir-introRow > .selectContainer > .selectArrowContainer > .selectArrow {
+            margin-top: 0;
+        }
+
+        /* Targets and Tags are the longest, most important parts of a rule: frame
+           them and darken their surface so they stand out from the card. */
+        .ir-targets,
+        .ir-tags {
             margin: 1em 0 1.8em !important;
             border: 0.1em solid rgba(128, 128, 128, 0.4);
             border-radius: 0.2em;
             background: rgba(0, 0, 0, 0.25);
         }
 
-        .ir-targets > summary {
+        .ir-targets > summary,
+        .ir-tags > summary {
             border-bottom: 0.1em solid rgba(128, 128, 128, 0.4);
         }
 
-        .ir-targets > summary > .ir-collapseTitle {
+        .ir-targets > summary > .ir-collapseTitle,
+        .ir-tags > summary > .ir-collapseTitle {
             font-size: 1.25em;
             font-weight: 600;
-        }
-
-        .ir-tags > summary > .ir-collapseTitle {
-            font-size: 1.15em;
         }
 
         .ir-pickRow {
@@ -244,6 +264,18 @@
                         Upload a video file, or pick any video that is already in one of your libraries.
                         Nothing is copied and your media is never modified.
                     </p>
+
+                    <div class="inputContainer">
+                        <div class="flex align-items-center">
+                            <div class="flex-grow-1">
+                                <input type="text" is="emby-input" id="introFolder" label="Intro folder (absolute path, empty = plugin default)" />
+                            </div>
+                            <button type="button" is="emby-button" id="applyFolderBtn" class="raised ir-folderButton">
+                                <span>Change folder</span>
+                            </button>
+                        </div>
+                        <div class="fieldDescription" id="introFolderInfo"></div>
+                    </div>
 
                     <div class="inputContainer">
                         <button type="button" is="emby-button" id="uploadBtn" class="raised">
@@ -497,14 +529,54 @@
             };
 
             // ---------- load ----------
+            let introFolder = null;
+
+            const renderFolder = () => {
+                if (!introFolder) return;
+                const input = document.querySelector('#introFolder');
+                input.value = introFolder.Configured || '';
+                document.querySelector('#introFolderInfo').textContent =
+                    'Files are stored in ' + introFolder.Effective
+                    + (introFolder.IsDefault ? ' (plugin default).' : '.')
+                    + ' Copy files into that folder and they show up here automatically.';
+            };
+
+            const loadFolder = async () => {
+                introFolder = await ApiClient.getJSON(api('/IntroFolder'));
+                renderFolder();
+            };
+
+            const applyFolder = () => {
+                const input = document.querySelector('#introFolder');
+                Dashboard.showLoadingMsg();
+                fetch(api('/IntroFolder'), {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json', 'X-Emby-Token': token() },
+                    body: JSON.stringify({ Path: input.value.trim() })
+                }).then(async (response) => {
+                    if (!response.ok) {
+                        const text = await response.text();
+                        throw new Error(text || 'Could not change the folder.');
+                    }
+                    introFolder = await response.json();
+                    config.IntroFolder = introFolder.Configured || '';
+                    await reloadAssets();
+                    renderFolder();
+                }).catch((error) => {
+                    document.querySelector('#introFolderInfo').textContent =
+                        error.message || 'Could not change the folder.';
+                }).finally(() => Dashboard.hideLoadingMsg());
+            };
+
             const load = async () => {
                 Dashboard.showLoadingMsg();
-                const [cfg, usrs, tree, assets, vids] = await Promise.all([
+                const [cfg, usrs, tree, assets, vids, folder] = await Promise.all([
                     ApiClient.getPluginConfiguration(pluginId),
                     ApiClient.getJSON(api('/Users')),
                     ApiClient.getJSON(api('/Targets')),
                     ApiClient.getJSON(api('/Assets')),
-                    ApiClient.getJSON(api('/Videos'))
+                    ApiClient.getJSON(api('/Videos')),
+                    ApiClient.getJSON(api('/IntroFolder'))
                 ]);
                 config = cfg;
                 config.Rules = config.Rules || [];
@@ -517,6 +589,7 @@
                 users = usrs || [];
                 targets = tree || [];
                 videos = vids || [];
+                introFolder = folder;
                 assetExists = {};
                 (assets || []).forEach(a => { assetExists[a.Id] = a.Exists; });
 
@@ -537,6 +610,7 @@
                 });
 
                 document.querySelector('#moviesOnly').checked = !!config.MoviesOnly;
+                renderFolder();
                 renderAssets();
                 renderRules();
                 Dashboard.hideLoadingMsg();
@@ -1196,6 +1270,13 @@
             document.querySelector('#uploadBtn').addEventListener('click', () => document.querySelector('#uploadFile').click());
             document.querySelector('#uploadFile').addEventListener('change', upload);
             document.querySelector('#pickVideoBtn').addEventListener('click', openVideoPicker);
+            document.querySelector('#applyFolderBtn').addEventListener('click', applyFolder);
+            document.querySelector('#introFolder').addEventListener('keydown', (e) => {
+                if (e.key === 'Enter') {
+                    e.preventDefault();
+                    applyFolder();
+                }
+            });
 
             document.querySelector('#moviesOnlyRow').appendChild(infoTip(
                 'Turning this on skips episodes and seasons. Some TV and mobile apps do not '

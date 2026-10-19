@@ -25,6 +25,13 @@ public class PluginConfiguration : BasePluginConfiguration
     /// Gets or sets a value indicating whether intros are limited to movies.
     /// </summary>
     public bool MoviesOnly { get; set; }
+
+    /// <summary>
+    /// Gets or sets the folder that holds uploaded intro files. Empty means the
+    /// plugin's own folder (under the Jellyfin configuration directory); set it to a
+    /// folder on a larger drive to keep the server drive free.
+    /// </summary>
+    public string IntroFolder { get; set; } = string.Empty;
 }
 
 /// <summary>
