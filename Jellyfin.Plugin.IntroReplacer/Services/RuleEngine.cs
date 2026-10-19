@@ -68,53 +68,58 @@ public static class RuleEngine
     /// <returns><c>true</c> when the rule matches.</returns>
     public static bool Matches(IntroRule rule, RuleContext context)
     {
-        if (rule.LibraryIds.Count > 0 && !rule.LibraryIds.Any(context.CollectionFolderIds.Contains))
+        if (ResolveTargetMode(rule) == IntroTargetMode.Targets)
         {
-            return false;
-        }
-
-        // Libraries are active by default; an excluded library excludes its subtree.
-        if (rule.ExcludedLibraryIds.Any(context.CollectionFolderIds.Contains))
-        {
-            return false;
-        }
-
-        // Item scope: empty target list means "all items matching the other conditions".
-        // Otherwise the item (or one of its ancestors) must be an active target.
-        if (rule.TargetItemIds.Count > 0)
-        {
-            if (!rule.TargetItemIds.Any(context.ItemAndAncestorIds.Contains))
+            if (rule.LibraryIds.Count > 0 && !rule.LibraryIds.Any(context.CollectionFolderIds.Contains))
             {
                 return false;
             }
 
-            // Deactivated seasons/episodes exclude their whole subtree.
-            if (rule.ExcludedItemIds.Any(context.ItemAndAncestorIds.Contains))
+            // Libraries are active by default; an excluded library excludes its subtree.
+            if (rule.ExcludedLibraryIds.Any(context.CollectionFolderIds.Contains))
             {
                 return false;
             }
-        }
 
-        if (rule.IncludeTags.Count > 0 &&
-            !rule.IncludeTags.Any(t => context.Tags.Contains(t)))
-        {
-            return false;
-        }
+            // Item scope: empty target list means "all items matching the other conditions".
+            // Otherwise the item (or one of its ancestors) must be an active target.
+            if (rule.TargetItemIds.Count > 0)
+            {
+                if (!rule.TargetItemIds.Any(context.ItemAndAncestorIds.Contains))
+                {
+                    return false;
+                }
 
-        if (rule.ExcludeTags.Count > 0 &&
-            rule.ExcludeTags.Any(t => context.Tags.Contains(t)))
-        {
-            return false;
+                // Deactivated seasons/episodes exclude their whole subtree.
+                if (rule.ExcludedItemIds.Any(context.ItemAndAncestorIds.Contains))
+                {
+                    return false;
+                }
+            }
         }
-
-        if (rule.Genres.Count > 0 && !rule.Genres.Any(g => context.Genres.Contains(g)))
+        else
         {
-            return false;
-        }
+            if (rule.IncludeTags.Count > 0 &&
+                !rule.IncludeTags.Any(t => context.Tags.Contains(t)))
+            {
+                return false;
+            }
 
-        if (rule.Studios.Count > 0 && !rule.Studios.Any(s => context.Studios.Contains(s)))
-        {
-            return false;
+            if (rule.ExcludeTags.Count > 0 &&
+                rule.ExcludeTags.Any(t => context.Tags.Contains(t)))
+            {
+                return false;
+            }
+
+            if (rule.Genres.Count > 0 && !rule.Genres.Any(g => context.Genres.Contains(g)))
+            {
+                return false;
+            }
+
+            if (rule.Studios.Count > 0 && !rule.Studios.Any(s => context.Studios.Contains(s)))
+            {
+                return false;
+            }
         }
 
         if (rule.UserIds.Count > 0 && !rule.UserIds.Contains(context.UserId))
@@ -134,6 +139,28 @@ public static class RuleEngine
         }
 
         return true;
+    }
+
+    /// <summary>
+    /// Resolves the rule's targeting method. Rules saved before <c>TargetMode</c>
+    /// existed have no explicit value: they are treated as tag-based when any tag,
+    /// genre or studio condition is set, and target-tree-based otherwise.
+    /// </summary>
+    /// <param name="rule">The rule.</param>
+    /// <returns>The targeting method.</returns>
+    public static IntroTargetMode ResolveTargetMode(IntroRule rule)
+    {
+        if (rule.TargetMode.HasValue)
+        {
+            return rule.TargetMode.Value;
+        }
+
+        return rule.IncludeTags.Count > 0
+            || rule.ExcludeTags.Count > 0
+            || rule.Genres.Count > 0
+            || rule.Studios.Count > 0
+            ? IntroTargetMode.Tags
+            : IntroTargetMode.Targets;
     }
 
     private static List<Guid> PickOne(List<Guid> candidates, Random random)

@@ -14,3 +14,7 @@ services:
       - ./jellyfin/config:/config
       - ./jellyfin/cache:/cache
       - ./media:/media
+      # The intro folder can be any container path backed by a host folder you own,
+      # e.g. a dedicated folder next to your media (then set the plugin's Intro
+      # folder to /media/Intros):
+      # - /mnt/media/Intros:/media/Intros

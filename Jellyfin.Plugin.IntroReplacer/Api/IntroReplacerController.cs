@@ -439,30 +439,45 @@ public class IntroReplacerController : ControllerBase
                             var episodes = season.GetChildren(user, true)
                                 .OfType<Episode>()
                                 .OrderBy(e => e.IndexNumber ?? 0)
-                                .Select(e => new TargetNodeDto(e.Id, e.Name, "Episode", e.IndexNumber, Array.Empty<TargetNodeDto>()))
+                                .Select(e => Node(e, "Episode", e.IndexNumber, Array.Empty<TargetNodeDto>()))
                                 .ToList();
 
-                            seasons.Add(new TargetNodeDto(
-                                season.Id,
-                                season.Name,
-                                "Season",
-                                season.IndexNumber,
-                                episodes));
+                            seasons.Add(Node(season, "Season", season.IndexNumber, episodes));
                         }
                     }
 
-                    children.Add(new TargetNodeDto(series.Id, series.Name, "Series", null, seasons));
+                    children.Add(Node(series, "Series", null, seasons));
                 }
                 else if (item is Movie movie)
                 {
-                    children.Add(new TargetNodeDto(movie.Id, movie.Name, "Movie", null, Array.Empty<TargetNodeDto>()));
+                    children.Add(Node(movie, "Movie", null, Array.Empty<TargetNodeDto>()));
                 }
             }
 
-            result.Add(new TargetNodeDto(libraryId, library.Name, "Library", null, children));
+            var libraryItem = _libraryManager.GetItemById(libraryId);
+            result.Add(libraryItem is not null
+                ? Node(libraryItem, "Library", null, children)
+                : new TargetNodeDto(
+                    libraryId,
+                    library.Name,
+                    "Library",
+                    null,
+                    children,
+                    Array.Empty<string>(),
+                    Array.Empty<string>(),
+                    Array.Empty<string>()));
         }
 
         return Ok(result);
+
+        // The config page previews tag-based rules locally, so every node carries
+        // the metadata it would match against (own tags/genres/studios merged with
+        // the ancestors, exactly like IntroMatcher does for playback).
+        static TargetNodeDto Node(BaseItem item, string type, int? index, IReadOnlyList<TargetNodeDto> children)
+        {
+            var (tags, genres, studios) = IntroMatcher.GetMergedMetadata(item);
+            return new TargetNodeDto(item.Id, item.Name, type, index, children, tags, genres, studios);
+        }
     }
 
     /// <summary>
@@ -525,12 +540,18 @@ public record UserDto(Guid Id, string Name);
 /// <param name="Type">Series, Season, Episode or Movie.</param>
 /// <param name="Index">Season/episode number, when applicable.</param>
 /// <param name="Children">Nested nodes.</param>
+/// <param name="Tags">Tags merged with the ancestors (used by the tag-rule preview).</param>
+/// <param name="Genres">Genres merged with the ancestors.</param>
+/// <param name="Studios">Studios merged with the ancestors.</param>
 public record TargetNodeDto(
     Guid Id,
     string Name,
     string Type,
     int? Index,
-    IReadOnlyList<TargetNodeDto> Children);
+    IReadOnlyList<TargetNodeDto> Children,
+    IReadOnlyList<string> Tags,
+    IReadOnlyList<string> Genres,
+    IReadOnlyList<string> Studios);
 
 /// <summary>Result of a rule evaluation test.</summary>
 /// <param name="RuleName">Matched rule name, or null.</param>

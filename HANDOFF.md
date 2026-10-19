@@ -330,6 +330,7 @@ Tests are now 32 (`IntroSessionTrackerTests` adds 9).
    `LibraryIds` into `ExcludedLibraryIds` (all libraries not in the include list become
    exclusions) and clears it, so unchecking a library now hides its whole subtree exactly
    like a series/season. Test: `ExcludedLibraryBlocksItsItems`.
+   *(Superseded in session 11: this applies only while the rule is in Targets mode.)*
 
 ## 3i. Session 10 notes — readable intro names, configurable folder
 
@@ -355,6 +356,46 @@ Tests are now 32 (`IntroSessionTrackerTests` adds 9).
    empty `selectLabel` inside the compact intro rows is hidden and the dropdown arrow is
    centred on the select (`top: 50%; translateY(-50%)`), fixing the slightly low arrows.
 
+## 3j. Session 11 notes — Targets vs Tags as exclusive methods
+
+1. **Targets and Tags are now alternatives, chosen with a radio.** `IntroRule.TargetMode`
+   (`IntroTargetMode.Targets`/`Tags`, nullable) is evaluated by
+   `RuleEngine.ResolveTargetMode`: `Targets` checks libraries and the target tree and
+   ignores tag fields; `Tags` checks tags/genres/studios and ignores libraries and the
+   target tree. `null` (rules saved before this) is inferred as Tags when any
+   tag/genre/studio condition is set, else Targets — so the live rules (tags +
+   accidentally excluded `Serie TV`) start working without being edited. Tests:
+   `TagsModeIgnoresTheTargetTree`, `TargetsModeIgnoresTagConditions`,
+   `LegacyRuleWithTagsInfersTagsMode`, `LegacyRuleWithoutTagsInfersTargetsMode`.
+2. **The inactive method is greyed out, compact and locked.** Each section has a plain
+   radio on the left of its `<summary>` (not `emby-radio`, which is not guaranteed on the
+   dashboard route). `syncMode` toggles `ir-modeOff`, forces the inactive `<details>`
+   closed, and click/keydown guards stop it from opening; the CSS hides its body, arrow
+   and bold title. Nothing is cleared: switching back shows the same tree/fields.
+3. **The scope line moved into the rule header.** The old counts lived in the Targets
+   summary. The rule `<summary>` now holds `.ir-ruleScope` (so it is visible while the
+   rule is collapsed) and shows `Targets — 1 series, 2 seasons, …` or
+   `Tags — 3 episodes, 1 movie` (or `no matching items`). Tag counts are computed in the
+   browser from `/Targets`, whose nodes now carry `Tags`/`Genres`/`Studios` merged with
+   ancestors (`IntroMatcher.GetMergedMetadata`, also used by `BuildContext`). Target
+   summaries no longer say "all items" when every library is excluded; they say
+   "no items". Tag fields, target checkboxes and the radios all call
+   `updateScopeSummary`.
+4. **Folder field and docs.** The intro-folder help now says it is a **container** path,
+   explains the Docker mount, and warns against using a media library root. README has a
+   Docker storage/permissions section; `docker/compose.yaml` has a commented
+   `/mnt/media/Intros:/media/Intros` example. Local test env can use `/media/Intros`
+   (`./media` is already mounted).
+5. **Verification.** `dotnet build` clean, `dotnet test` 38/38, jsdom smoke updated to
+   exercise the radios, the locked section and both scope counts. jsdom itself is a
+   temp-only dependency (`/tmp/opencode/uitest`). Live (10.10.7 container): both rules
+   updated to explicit `TargetMode=Tags` through the plugin-config API (string enum
+   round-trips through the XML config), `/IntroReplacer/Test` returned the expected rule
+   and intro for a Season 1 and a Season 2 episode despite `ExcludedLibraryIds`
+   containing `Serie TV`, and `/Items/{id}/Intros` returned the intro item. Switching
+   rule 2 back to `Targets` made the same test return no rule, proving the methods are
+   exclusive.
+
 ## 4. Automatic intro detection — status
 
 - **Chapters: implemented** (`IntroChapterDetector`) and unit-tested. It is read-only
@@ -378,11 +419,13 @@ types):
 - `IntroAsset`: `Id`, `Name` (display name; also the source of the file name for
   uploads), `FileName` (the stored file under the intro folder, empty for library
   assets), `LibraryItemId` (an existing library video, `Guid.Empty` for uploads).
-- `IntroRule`: `Id`, `Name`, `Enabled`, `LibraryIds` (legacy include-list, empty = all
-  libraries), `ExcludedLibraryIds` (libraries left out; all active by default),
-  `UserIds`, `TargetItemIds`
-  (active series/movie ids; empty = all), `ExcludedItemIds` (deactivated season/episode
-  ids), `IncludeTags`, `ExcludeTags`, `Genres`, `Studios`, `DateRange`,
+- `IntroRule`: `Id`, `Name`, `Enabled`, `TargetMode` (`Targets`/`Tags`; null = infer
+  from the conditions), `LibraryIds` (legacy include-list, empty = all
+  libraries, Targets mode only), `ExcludedLibraryIds` (libraries left out; all active by
+  default, Targets mode only), `UserIds`, `TargetItemIds`
+  (active series/movie ids; empty = all, Targets mode only), `ExcludedItemIds`
+  (deactivated season/episode ids, Targets mode only), `IncludeTags`, `ExcludeTags`,
+  `Genres`, `Studios` (Tags mode only), `DateRange`,
   `ReleaseDateRange`, `AssetIds`, `PlaybackMode` (`RandomOne`/`SequentialAll`),
   `Placement` (`Replace`/`Prepend`), `Frequency`
   (`EveryTime`/`OncePerInterval`/`OncePerSession`), `RepeatAfterMinutes` (180, used by

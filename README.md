@@ -9,19 +9,24 @@ Local Intros plugin).
 
 ## How it works
 
-- A rule engine (first-match-wins) picks an intro file based on library, users,
-  tags, genres, studios, current/release date windows, or a library → series → season
-  → episode target tree.
-- In the target tree, an empty selection means "all libraries"; the rule header shows a
-  live count (e.g. `1 library, 2 series, 4 seasons, 20 episodes`).
+- A rule engine (first-match-wins) picks an intro file. Per rule you choose **one**
+  targeting method with a radio button: the **Targets** tree (library → series → season
+  → episode/movie) or **Tags** (include/exclude tags, genres, studios). The other method
+  is greyed out and kept, so you can switch back without losing it. Users and the
+  current/release date windows apply to both.
+- The rule header always shows the result of the selected method (e.g.
+  `Targets — 1 series, 2 seasons, 20 episodes` or `Tags — 12 episodes, 3 movies`),
+  even when the rule is collapsed. In the target tree an empty selection means
+  "all items".
 - Per rule you choose **Replace** (skip the item's own intro) or **Prepend** (play
   the item from the beginning), and **how often the intro plays**: every time you start
   a title, only after a per-rule wait time you set, or once per session (again after you
   close the app or sign out).
-- Uploaded intro files are stored in the plugin data folder and registered through a
-  **hidden internal library** (`Intro Replacer`), hidden from every user's home. This
-  is required: Jellyfin silently drops intro files that are not scanned library
-  items. No media files are rewritten or duplicated.
+- Uploaded intro files are stored in the plugin data folder (configurable, see below)
+  and registered through a **hidden internal library** (`Intro Replacer`), hidden from
+  every user's home. This is required: Jellyfin silently drops intro files that are not
+  scanned library items. No media files are rewritten or duplicated. Files copied into
+  the intro folder are registered automatically.
 - You can also use **any video already in your libraries** (movies, episodes, other
   videos) as an intro — nothing is copied or modified. Deleting such an intro only
   removes it from the plugin's list, never the media file.
@@ -50,6 +55,30 @@ checkboxes and dropdowns, and a modal to browse your libraries and pick a video.
 > when you press Play on a series/movie or on the first episode, not when you jump to a
 > later episode or resume one, and not on automatic "next episode" transitions. This is
 > a client limitation; the server is never asked in those cases.
+
+## Intro storage folder (Docker)
+
+Uploaded intro files live in the plugin data folder by default. To keep them on a
+larger drive, create a dedicated folder on the host and mount it into the container:
+
+```yaml
+volumes:
+  - /mnt/media/Intros:/media/Intros
+```
+
+Then set the plugin's **Intro folder** to the **container path** `/media/Intros`
+(not the host path). The plugin moves existing intro files there, registers the folder
+as its hidden library and scans it. Use a dedicated folder, not a Series/Movies library
+root, or the clips will also appear in that library.
+
+Permissions: the official `jellyfin/jellyfin` image runs as **root**, so folders it
+creates under `/config` are root-owned. Create the host folder as your own user
+(`mkdir -p /mnt/media/Intros`); the container can still write into it, and you can drop
+files there. For the default folder, fix ownership once with:
+
+```bash
+sudo chown -R 1000:1000 <jellyfin config>/plugins/configurations/IntroReplacer
+```
 
 ## Install (release)
 

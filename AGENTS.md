@@ -153,12 +153,28 @@ docker compose -f docker/compose.yaml up -d                          # then rest
   `IntroLibraryManager.GetLibraryItemId()` (one query per virtual folder, skipping the
   hidden one). Add the same filter to any new endpoint that enumerates libraries or
   items.
+- **Targets and Tags are alternative targeting methods, not additive conditions.** Each
+  rule has `TargetMode` (`Targets` or `Tags`; `null` = infer: Tags when any
+  tag/genre/studio condition is set, else Targets, so old rules keep working).
+  `RuleEngine.Matches` evaluates **only** the selected method — `LibraryIds`,
+  `ExcludedLibraryIds`, `TargetItemIds` and `ExcludedItemIds` are ignored in `Tags`
+  mode, and `IncludeTags`/`ExcludeTags`/`Genres`/`Studios` are ignored in `Targets`
+  mode. User/date/release-date conditions apply to both. The UI enforces this with a
+  radio on the left of each section: the unselected section is greyed out, collapsed
+  and cannot be opened, but its content stays in the rule and returns when selected
+  again.
 - The targets tree is the only place library scoping is chosen: `GET /Targets` returns
   the libraries themselves as the top-level nodes, so there is no separate library
   checkbox list and no `GET /Libraries` endpoint. Libraries are active by default and
   deactivated through `ExcludedLibraryIds` (unchecking hides the library's whole
   subtree, like a series/season; the config page converts any legacy `LibraryIds`
   include-list into exclusions on load). An empty `LibraryIds` still means "all".
+  `TargetNodeDto` carries the item's merged `Tags`/`Genres`/`Studios` (via
+  `IntroMatcher.GetMergedMetadata`) so the config page can preview a tag rule locally.
+- The rule header always shows a live scope line (inside the rule `<summary>`, so it
+  survives collapsing): `Targets — …` counts the selected tree items, `Tags — …`
+  counts matching episodes/movies using the same include/exclude/genre/studio logic as
+  the engine. Keep it updated from every control that changes the rule's scope.
 - A rule's intro picker is a compact token list: only the chosen assets are shown, each
   with a Remove button, followed by a trailing `(add …)` `emby-select` listing the
   remaining intros in alphabetical order. The Tags conditions live in their own

@@ -78,6 +78,55 @@ public class RuleEngineTests
     }
 
     [Fact]
+    public void TagsModeIgnoresTheTargetTree()
+    {
+        var rule = new IntroRule
+        {
+            TargetMode = IntroTargetMode.Tags,
+            ExcludedLibraryIds = { Library1 },
+            TargetItemIds = { Guid.NewGuid() },
+            IncludeTags = { "anime" }
+        };
+
+        Assert.True(RuleEngine.Matches(rule, Context()));
+    }
+
+    [Fact]
+    public void TargetsModeIgnoresTagConditions()
+    {
+        var rule = new IntroRule
+        {
+            TargetMode = IntroTargetMode.Targets,
+            TargetItemIds = { Series1 },
+            IncludeTags = { "horror" }
+        };
+
+        Assert.True(RuleEngine.Matches(rule, Context()));
+    }
+
+    [Fact]
+    public void LegacyRuleWithTagsInfersTagsMode()
+    {
+        var rule = new IntroRule
+        {
+            ExcludedLibraryIds = { Library1 },
+            IncludeTags = { "anime" }
+        };
+
+        Assert.Equal(IntroTargetMode.Tags, RuleEngine.ResolveTargetMode(rule));
+        Assert.True(RuleEngine.Matches(rule, Context()));
+    }
+
+    [Fact]
+    public void LegacyRuleWithoutTagsInfersTargetsMode()
+    {
+        var rule = new IntroRule { TargetItemIds = { Series1 } };
+
+        Assert.Equal(IntroTargetMode.Targets, RuleEngine.ResolveTargetMode(rule));
+        Assert.True(RuleEngine.Matches(rule, Context()));
+    }
+
+    [Fact]
     public void TargetItemConditionMatchesAncestors()
     {
         var rule = new IntroRule { TargetItemIds = { Series1 } };

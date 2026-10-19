@@ -27,17 +27,7 @@ public static class IntroMatcher
         DateTime? now = null)
     {
         var ancestors = item.GetParents().ToList();
-
-        var tags = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-        var genres = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-        var studios = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-
-        foreach (var source in ancestors.Prepend(item))
-        {
-            AddAll(tags, source.Tags);
-            AddAll(genres, source.Genres);
-            AddAll(studios, source.Studios);
-        }
+        var (tags, genres, studios) = GetMergedMetadata(item);
 
         var itemAndAncestors = new HashSet<Guid> { item.Id };
         foreach (var id in item.GetAncestorIds())
@@ -57,13 +47,39 @@ public static class IntroMatcher
         {
             CollectionFolderIds = collectionFolders,
             ItemAndAncestorIds = itemAndAncestors,
-            Tags = tags,
-            Genres = genres,
-            Studios = studios,
+            Tags = new HashSet<string>(tags, StringComparer.OrdinalIgnoreCase),
+            Genres = new HashSet<string>(genres, StringComparer.OrdinalIgnoreCase),
+            Studios = new HashSet<string>(studios, StringComparer.OrdinalIgnoreCase),
             UserId = userId,
             Now = now ?? DateTime.Now,
             ReleaseDate = releaseDate
         };
+    }
+
+    /// <summary>
+    /// Returns the item's tags/genres/studios merged with those of its ancestors
+    /// (season, series, library, ...). Used by the rule matcher and by the config
+    /// page to preview how many items a tag-based rule affects.
+    /// </summary>
+    /// <param name="item">The item.</param>
+    /// <returns>The merged, sorted values.</returns>
+    public static (IReadOnlyList<string> Tags, IReadOnlyList<string> Genres, IReadOnlyList<string> Studios) GetMergedMetadata(BaseItem item)
+    {
+        var tags = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var genres = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var studios = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+        foreach (var source in item.GetParents().Prepend(item))
+        {
+            AddAll(tags, source.Tags);
+            AddAll(genres, source.Genres);
+            AddAll(studios, source.Studios);
+        }
+
+        static IReadOnlyList<string> Sorted(HashSet<string> values)
+            => values.OrderBy(v => v, StringComparer.OrdinalIgnoreCase).ToArray();
+
+        return (Sorted(tags), Sorted(genres), Sorted(studios));
     }
 
     private static void AddAll(ISet<string> target, string[]? source)

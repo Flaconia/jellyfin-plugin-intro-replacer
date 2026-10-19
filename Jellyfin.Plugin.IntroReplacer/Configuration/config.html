@@ -72,6 +72,71 @@
             flex-grow: 1;
         }
 
+        /* Rule header: title plus the always-visible scope line (the result of the
+           selected targeting method). */
+        .ir-ruleHead {
+            flex-grow: 1;
+            min-width: 0;
+        }
+
+        .ir-ruleHead > .ir-collapseTitle {
+            flex-grow: 0;
+        }
+
+        .ir-ruleScope {
+            font-size: 0.9em;
+            opacity: 0.8;
+            margin-top: 0.15em;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        /* Targets/Tags are alternative targeting methods: a radio selects one, the
+           other is greyed out, compressed and cannot be opened. */
+        .ir-modePick {
+            display: inline-flex;
+            align-items: center;
+            flex: 0 0 auto;
+            margin-right: 0.6em;
+            cursor: pointer;
+        }
+
+        .ir-modeRadio {
+            margin: 0;
+            width: 1.2em;
+            height: 1.2em;
+            accent-color: #00a4dc;
+            cursor: pointer;
+        }
+
+        .ir-collapse.ir-modeOff {
+            opacity: 0.55;
+        }
+
+        .ir-collapse.ir-modeOff > summary {
+            cursor: default;
+            padding-top: 0.5em;
+            padding-bottom: 0.5em;
+        }
+
+        .ir-collapse.ir-modeOff > summary > .ir-collapseTitle {
+            font-size: 1em;
+            font-weight: 400;
+        }
+
+        .ir-collapse.ir-modeOff > summary > .material-icons {
+            display: none;
+        }
+
+        .ir-collapse.ir-modeOff > .ir-collapseBody {
+            display: none !important;
+        }
+
+        .ir-collapse.ir-modeOff > .ir-tree {
+            display: none !important;
+        }
+
         .ir-collapseEnabled {
             flex: 0 0 auto;
             width: auto;
@@ -268,7 +333,7 @@
                     <div class="inputContainer">
                         <div class="flex align-items-center">
                             <div class="flex-grow-1">
-                                <input type="text" is="emby-input" id="introFolder" label="Intro folder (absolute path, empty = plugin default)" />
+                                <input type="text" is="emby-input" id="introFolder" label="Intro folder (container path, empty = plugin default)" />
                             </div>
                             <button type="button" is="emby-button" id="applyFolderBtn" class="raised ir-folderButton">
                                 <span>Change folder</span>
@@ -354,6 +419,7 @@
                 Id: guid(),
                 Name: 'New rule',
                 Enabled: true,
+                TargetMode: 'Targets',
                 LibraryIds: [],
                 ExcludedLibraryIds: [],
                 UserIds: [],
@@ -538,7 +604,9 @@
                 document.querySelector('#introFolderInfo').textContent =
                     'Files are stored in ' + introFolder.Effective
                     + (introFolder.IsDefault ? ' (plugin default).' : '.')
-                    + ' Copy files into that folder and they show up here automatically.';
+                    + ' This is the path inside the Jellyfin container: mount the host folder'
+                    + ' into the container first (Docker volume), and use a dedicated folder,'
+                    + ' not a media library root. Files copied into it are added automatically.';
             };
 
             const loadFolder = async () => {
@@ -585,6 +653,16 @@
                 // them one so the open/closed state can be tracked per rule.
                 config.Rules.forEach(r => {
                     if (!r.Id || r.Id === '00000000-0000-0000-0000-000000000000') r.Id = guid();
+
+                    // Rules saved before Targets/Tags became alternatives have no
+                    // TargetMode: infer it from the conditions that are present.
+                    if (r.TargetMode !== 'Tags' && r.TargetMode !== 'Targets') {
+                        const hasTagConditions = (r.IncludeTags || []).length > 0
+                            || (r.ExcludeTags || []).length > 0
+                            || (r.Genres || []).length > 0
+                            || (r.Studios || []).length > 0;
+                        r.TargetMode = hasTagConditions ? 'Tags' : 'Targets';
+                    }
                 });
                 users = usrs || [];
                 targets = tree || [];
@@ -901,6 +979,18 @@
                 rule.LibraryIds = rule.LibraryIds || [];
                 rule.ExcludedLibraryIds = rule.ExcludedLibraryIds || [];
                 rule.AssetIds = rule.AssetIds || [];
+                rule.IncludeTags = rule.IncludeTags || [];
+                rule.ExcludeTags = rule.ExcludeTags || [];
+                rule.Genres = rule.Genres || [];
+                rule.Studios = rule.Studios || [];
+
+                // Rules saved before the targeting radio existed have no mode: infer
+                // it once (tags = Tags, otherwise Targets) so nothing changes for them.
+                if (rule.TargetMode !== 'Tags' && rule.TargetMode !== 'Targets') {
+                    const hasTagConditions = rule.IncludeTags.length > 0 || rule.ExcludeTags.length > 0
+                        || rule.Genres.length > 0 || rule.Studios.length > 0;
+                    rule.TargetMode = hasTagConditions ? 'Tags' : 'Targets';
+                }
 
                 const card = document.createElement('details');
                 card.className = 'ir-collapse paperList';
@@ -916,7 +1006,111 @@
                     title.style.opacity = rule.Enabled ? '1' : '0.5';
                 };
                 updateTitle();
-                summary.appendChild(title);
+
+                const titleWrap = document.createElement('div');
+                titleWrap.className = 'ir-ruleHead';
+                titleWrap.appendChild(title);
+
+                // The scope line always stays visible (even when the rule is closed),
+                // so the admin can see what the rule currently applies to.
+                const scopeInfo = document.createElement('div');
+                scopeInfo.className = 'ir-ruleScope fieldDescription';
+                titleWrap.appendChild(scopeInfo);
+                summary.appendChild(titleWrap);
+
+                const lowered = values => (values || []).map(v => String(v).toLowerCase());
+                const tagConditions = () => ({
+                    include: lowered(rule.IncludeTags),
+                    exclude: lowered(rule.ExcludeTags),
+                    genres: lowered(rule.Genres),
+                    studios: lowered(rule.Studios)
+                });
+
+                const matchesTagScope = (node, conditions) => {
+                    const tags = lowered(node.Tags);
+                    if (conditions.include.length && !conditions.include.some(t => tags.includes(t))) return false;
+                    if (conditions.exclude.length && conditions.exclude.some(t => tags.includes(t))) return false;
+
+                    const genres = lowered(node.Genres);
+                    if (conditions.genres.length && !conditions.genres.some(g => genres.includes(g))) return false;
+
+                    const studios = lowered(node.Studios);
+                    if (conditions.studios.length && !conditions.studios.some(s => studios.includes(s))) return false;
+
+                    return true;
+                };
+
+                const updateScopeSummary = () => {
+                    const part = (n, singular, plural) => n > 0 ? n + ' ' + (n === 1 ? singular : plural) : null;
+
+                    if (rule.TargetMode === 'Tags') {
+                        const conditions = tagConditions();
+                        if (!conditions.include.length && !conditions.exclude.length
+                            && !conditions.genres.length && !conditions.studios.length) {
+                            scopeInfo.textContent = 'Tags — all items';
+                            return;
+                        }
+
+                        let episodes = 0;
+                        let movies = 0;
+                        targets.forEach(lib => (lib.Children || []).forEach(node => {
+                            if (node.Type === 'Movie') {
+                                if (matchesTagScope(node, conditions)) movies++;
+                                return;
+                            }
+
+                            (node.Children || []).forEach(season => (season.Children || []).forEach(episode => {
+                                if (matchesTagScope(episode, conditions)) episodes++;
+                            }));
+                        }));
+
+                        const parts = [
+                            part(episodes, 'episode', 'episodes'),
+                            part(movies, 'movie', 'movies')
+                        ].filter(p => p);
+
+                        scopeInfo.textContent = 'Tags — ' + (parts.length > 0 ? parts.join(', ') : 'no matching items');
+                        return;
+                    }
+
+                    const count = { libraries: 0, series: 0, seasons: 0, episodes: 0, movies: 0 };
+
+                    if (rule.ExcludedLibraryIds.length > 0) {
+                        count.libraries = targets.filter(lib => libraryInScope(rule, lib.Id)).length;
+                    }
+
+                    targets.forEach(lib => {
+                        if (!libraryInScope(rule, lib.Id)) return;
+
+                        (lib.Children || []).forEach(node => {
+                            if (node.Type === 'Movie') {
+                                if (rule.TargetItemIds.includes(node.Id)) count.movies++;
+                                return;
+                            }
+
+                            if (!rule.TargetItemIds.includes(node.Id)) return;
+                            count.series++;
+                            (node.Children || []).forEach(season => {
+                                if (rule.ExcludedItemIds.includes(season.Id)) return;
+                                count.seasons++;
+                                (season.Children || []).forEach(episode => {
+                                    if (!rule.ExcludedItemIds.includes(episode.Id)) count.episodes++;
+                                });
+                            });
+                        });
+                    });
+
+                    const parts = [
+                        part(count.libraries, 'library', 'libraries'),
+                        part(count.series, 'series', 'series'),
+                        part(count.seasons, 'season', 'seasons'),
+                        part(count.episodes, 'episode', 'episodes'),
+                        part(count.movies, 'movie', 'movies')
+                    ].filter(p => p);
+
+                    const empty = rule.TargetItemIds.length === 0 && rule.ExcludedLibraryIds.length === 0;
+                    scopeInfo.textContent = 'Targets — ' + (parts.length > 0 ? parts.join(', ') : (empty ? 'all items' : 'no items'));
+                };
 
                 const enabled = checkbox('Enabled', rule.Enabled, v => { rule.Enabled = v; updateTitle(); });
                 enabled.classList.add('ir-collapseEnabled');
@@ -988,65 +1182,61 @@
 
                 // target tree (collapsible: it is the longest, most important part
                 // of a rule, so it gets a framed, darker surface)
+                const modePick = (value, label) => {
+                    const wrap = document.createElement('label');
+                    wrap.className = 'ir-modePick';
+                    wrap.title = 'Use ' + label + ' to choose the items this rule applies to';
+                    const input = document.createElement('input');
+                    input.type = 'radio';
+                    input.className = 'ir-modeRadio';
+                    input.name = 'ir-mode-' + rule.Id;
+                    input.value = value;
+                    input.checked = rule.TargetMode === value;
+                    input.addEventListener('click', e => e.stopPropagation());
+                    input.addEventListener('change', () => {
+                        if (!input.checked) return;
+                        rule.TargetMode = value;
+                        syncMode(true);
+                    });
+                    // The radio lives in a <summary>: keep its clicks from collapsing or
+                    // expanding the section (which is also locked while inactive).
+                    wrap.addEventListener('click', e => e.stopPropagation());
+                    wrap.appendChild(input);
+                    return wrap;
+                };
+
                 const targetBox = document.createElement('details');
                 targetBox.className = 'ir-collapse ir-targets';
                 targetBox.open = openState[rule.Id + ':targets'] === true;
                 targetBox.addEventListener('toggle', () => {
+                    if (rule.TargetMode === 'Tags') {
+                        if (targetBox.open) targetBox.open = false;
+                        return;
+                    }
+
                     openState[rule.Id + ':targets'] = targetBox.open;
                     if (targetBox.open) ensureTree();
                 });
 
                 const targetSummary = document.createElement('summary');
+                const targetPick = modePick('Targets', 'Targets');
+                const targetRadio = targetPick.querySelector('input');
+                targetSummary.appendChild(targetPick);
+                targetSummary.addEventListener('click', (e) => {
+                    if (rule.TargetMode === 'Tags' && !e.target.closest('.ir-modePick')) e.preventDefault();
+                });
+                targetSummary.addEventListener('keydown', (e) => {
+                    if (rule.TargetMode === 'Tags' && !e.target.closest('.ir-modePick')
+                        && (e.key === 'Enter' || e.key === ' ')) {
+                        e.preventDefault();
+                    }
+                });
+
                 const targetTitle = document.createElement('h3');
                 targetTitle.className = 'ir-collapseTitle';
                 targetTitle.textContent = 'Targets';
                 targetSummary.appendChild(targetTitle);
-                const targetSummaryInfo = document.createElement('span');
-                targetSummaryInfo.className = 'fieldDescription';
-                targetSummary.appendChild(targetSummaryInfo);
                 targetSummary.appendChild(elem('<span class="material-icons" aria-hidden="true">expand_more</span>'));
-
-                const updateTargetSummary = () => {
-                    const count = { libraries: 0, series: 0, seasons: 0, episodes: 0, movies: 0 };
-
-                    if (rule.ExcludedLibraryIds.length > 0) {
-                        count.libraries = targets.filter(lib => libraryInScope(rule, lib.Id)).length;
-                    }
-
-                    targets.forEach(lib => {
-                        if (!libraryInScope(rule, lib.Id)) return;
-
-                        (lib.Children || []).forEach(node => {
-                            if (node.Type === 'Movie') {
-                                if (rule.TargetItemIds.includes(node.Id)) count.movies++;
-                                return;
-                            }
-
-                            if (!rule.TargetItemIds.includes(node.Id)) return;
-                            count.series++;
-                            (node.Children || []).forEach(season => {
-                                if (rule.ExcludedItemIds.includes(season.Id)) return;
-                                count.seasons++;
-                                (season.Children || []).forEach(ep => {
-                                    if (!rule.ExcludedItemIds.includes(ep.Id)) count.episodes++;
-                                });
-                            });
-                        });
-                    });
-
-                    const part = (n, singular, plural) => n > 0 ? n + ' ' + (n === 1 ? singular : plural) : null;
-                    const parts = [
-                        part(count.libraries, 'library', 'libraries'),
-                        part(count.series, 'series', 'series'),
-                        part(count.seasons, 'season', 'seasons'),
-                        part(count.episodes, 'episode', 'episodes'),
-                        part(count.movies, 'movie', 'movies')
-                    ].filter(p => p);
-
-                    targetSummaryInfo.textContent = parts.length > 0
-                        ? ' — ' + parts.join(', ')
-                        : ' — all items';
-                };
 
                 const treeHost = document.createElement('div');
                 treeHost.className = 'ir-tree';
@@ -1057,14 +1247,13 @@
 
                 const refreshTree = () => {
                     treeHost.querySelectorAll('.ir-treeNode').forEach(n => n.remove());
-                    targets.forEach(node => treeHost.appendChild(renderTargetNode(rule, node, refreshTree, updateTargetSummary)));
-                    updateTargetSummary();
+                    targets.forEach(node => treeHost.appendChild(renderTargetNode(rule, node, refreshTree, updateScopeSummary)));
+                    updateScopeSummary();
                 };
                 // Only build the (potentially large) tree once the section is opened.
                 const ensureTree = () => {
                     if (!treeHost.querySelector('.ir-treeNode')) refreshTree();
                 };
-                updateTargetSummary();
                 if (targetBox.open) ensureTree();
 
                 targetBox.appendChild(targetSummary);
@@ -1077,10 +1266,28 @@
                 tagsBox.className = 'ir-collapse ir-tags';
                 tagsBox.open = openState[rule.Id + ':tags'] === true;
                 tagsBox.addEventListener('toggle', () => {
+                    if (rule.TargetMode === 'Targets') {
+                        if (tagsBox.open) tagsBox.open = false;
+                        return;
+                    }
+
                     openState[rule.Id + ':tags'] = tagsBox.open;
                 });
 
                 const tagsSummary = document.createElement('summary');
+                const tagsPick = modePick('Tags', 'Tags');
+                const tagsRadio = tagsPick.querySelector('input');
+                tagsSummary.appendChild(tagsPick);
+                tagsSummary.addEventListener('click', (e) => {
+                    if (rule.TargetMode === 'Targets' && !e.target.closest('.ir-modePick')) e.preventDefault();
+                });
+                tagsSummary.addEventListener('keydown', (e) => {
+                    if (rule.TargetMode === 'Targets' && !e.target.closest('.ir-modePick')
+                        && (e.key === 'Enter' || e.key === ' ')) {
+                        e.preventDefault();
+                    }
+                });
+
                 const tagsTitle = document.createElement('h3');
                 tagsTitle.className = 'ir-collapseTitle';
                 tagsTitle.textContent = 'Tags';
@@ -1090,13 +1297,45 @@
 
                 const tagsBody = document.createElement('div');
                 tagsBody.className = 'ir-collapseBody';
-                tagsBody.appendChild(textField('Include tags (comma separated)', csv(rule.IncludeTags), v => rule.IncludeTags = parseCsv(v),
-                    'Items containing these tags are included in the rule. Exclude tags take priority: an item carrying an exclude tag is left out. Tags are matched against the item and its parent series/season, and any one of them is enough.'));
-                tagsBody.appendChild(textField('Exclude tags (comma separated)', csv(rule.ExcludeTags), v => rule.ExcludeTags = parseCsv(v)));
-                tagsBody.appendChild(textField('Genres (comma separated)', csv(rule.Genres), v => rule.Genres = parseCsv(v)));
-                tagsBody.appendChild(textField('Studios (comma separated)', csv(rule.Studios), v => rule.Studios = parseCsv(v)));
+                tagsBody.appendChild(textField('Include tags (comma separated)', csv(rule.IncludeTags), v => {
+                    rule.IncludeTags = parseCsv(v);
+                    updateScopeSummary();
+                }, 'Items containing these tags are included in the rule. Exclude tags take priority: an item carrying an exclude tag is left out. Tags are matched against the item and its parent series/season, and any one of them is enough.'));
+                tagsBody.appendChild(textField('Exclude tags (comma separated)', csv(rule.ExcludeTags), v => {
+                    rule.ExcludeTags = parseCsv(v);
+                    updateScopeSummary();
+                }));
+                tagsBody.appendChild(textField('Genres (comma separated)', csv(rule.Genres), v => {
+                    rule.Genres = parseCsv(v);
+                    updateScopeSummary();
+                }));
+                tagsBody.appendChild(textField('Studios (comma separated)', csv(rule.Studios), v => {
+                    rule.Studios = parseCsv(v);
+                    updateScopeSummary();
+                }));
                 tagsBox.appendChild(tagsBody);
                 body.appendChild(tagsBox);
+
+                // Grey out and lock the method that is not selected. Its content stays
+                // in the rule and comes back when the radio is switched back.
+                const syncMode = (activate) => {
+                    const tagsActive = rule.TargetMode === 'Tags';
+                    targetRadio.checked = !tagsActive;
+                    tagsRadio.checked = tagsActive;
+                    targetBox.classList.toggle('ir-modeOff', tagsActive);
+                    tagsBox.classList.toggle('ir-modeOff', !tagsActive);
+
+                    if (tagsActive) {
+                        targetBox.open = false;
+                        if (activate) tagsBox.open = true;
+                    } else {
+                        tagsBox.open = false;
+                        if (activate) targetBox.open = true;
+                    }
+
+                    updateScopeSummary();
+                };
+                syncMode(false);
 
                 const up = button('Move up', () => {
                     const [r] = config.Rules.splice(index, 1);

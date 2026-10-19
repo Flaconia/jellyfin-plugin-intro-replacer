@@ -74,15 +74,25 @@ public class IntroRule
     public bool Enabled { get; set; } = true;
 
     /// <summary>
+    /// Gets or sets how the rule chooses its items: the Targets tree or the
+    /// tag/genre/studio conditions. Only the selected method is evaluated.
+    /// <c>null</c> means "infer from the conditions", which keeps rules written
+    /// before this setting existed working (tags present = <see cref="IntroTargetMode.Tags"/>).
+    /// </summary>
+    public IntroTargetMode? TargetMode { get; set; }
+
+    /// <summary>
     /// Gets or sets the library ids this rule applies to. Kept for configurations
     /// written by older versions; the config page now drives scoping through
     /// <see cref="ExcludedLibraryIds"/>. An empty list means "all libraries".
+    /// Only used in <see cref="IntroTargetMode.Targets"/> mode.
     /// </summary>
     public List<Guid> LibraryIds { get; set; } = new();
 
     /// <summary>
     /// Gets or sets library ids excluded from this rule. All libraries are active
-    /// unless listed here, so deactivating one hides its contents.
+    /// unless listed here, so deactivating one hides its contents. Only used in
+    /// <see cref="IntroTargetMode.Targets"/> mode.
     /// </summary>
     public List<Guid> ExcludedLibraryIds { get; set; } = new();
 
@@ -92,26 +102,32 @@ public class IntroRule
     /// <summary>
     /// Gets or sets the item ids that activate this rule's item scope (series or
     /// movie ids; empty = all items matching the other conditions). Seasons and
-    /// episodes inherit activation from their series unless excluded.
+    /// episodes inherit activation from their series unless excluded. Only used in
+    /// <see cref="IntroTargetMode.Targets"/> mode.
     /// </summary>
     public List<Guid> TargetItemIds { get; set; } = new();
 
     /// <summary>
     /// Gets or sets item ids deactivated inside an active target (seasons or
-    /// episodes). Only meaningful when <see cref="TargetItemIds"/> is not empty.
+    /// episodes). Only meaningful when <see cref="TargetItemIds"/> is not empty and
+    /// only used in <see cref="IntroTargetMode.Targets"/> mode.
     /// </summary>
     public List<Guid> ExcludedItemIds { get; set; } = new();
 
-    /// <summary>Gets or sets tags that must be present (any of).</summary>
+    /// <summary>Gets or sets tags that must be present (any of). Only used in
+    /// <see cref="IntroTargetMode.Tags"/> mode.</summary>
     public List<string> IncludeTags { get; set; } = new();
 
-    /// <summary>Gets or sets tags that must not be present.</summary>
+    /// <summary>Gets or sets tags that must not be present. Only used in
+    /// <see cref="IntroTargetMode.Tags"/> mode.</summary>
     public List<string> ExcludeTags { get; set; } = new();
 
-    /// <summary>Gets or sets genres that must be present (any of).</summary>
+    /// <summary>Gets or sets genres that must be present (any of). Only used in
+    /// <see cref="IntroTargetMode.Tags"/> mode.</summary>
     public List<string> Genres { get; set; } = new();
 
-    /// <summary>Gets or sets studios that must be present (any of).</summary>
+    /// <summary>Gets or sets studios that must be present (any of). Only used in
+    /// <see cref="IntroTargetMode.Tags"/> mode.</summary>
     public List<string> Studios { get; set; } = new();
 
     /// <summary>Gets or sets an optional current-date window.</summary>
@@ -140,6 +156,16 @@ public class IntroRule
     /// Only used by <see cref="IntroFrequency.OncePerInterval"/>.
     /// </summary>
     public int RepeatAfterMinutes { get; set; } = 180;
+}
+
+/// <summary>How a rule chooses the items it applies to.</summary>
+public enum IntroTargetMode
+{
+    /// <summary>Use the Targets tree (libraries, series, seasons, episodes, movies).</summary>
+    Targets,
+
+    /// <summary>Use the tag/genre/studio conditions.</summary>
+    Tags
 }
 
 /// <summary>How intros are selected from a rule's asset list.</summary>
