@@ -396,6 +396,42 @@ Tests are now 32 (`IntroSessionTrackerTests` adds 9).
    rule 2 back to `Targets` made the same test return no rule, proving the methods are
    exclusive.
 
+## 3k. Session 12 notes — vanilla controls, Move down, translatable strings
+
+1. **Remove buttons are now the vanilla trash icon.** `trashButton(title, onClick)` builds
+   `is="paper-icon-button-light"` with `<span class="material-icons delete">`, the same
+   markup the metadata editor uses next to removable fields. Used in the asset list and
+   in the per-rule intro rows; the rule-level "Remove rule" text button is unchanged.
+2. **The targeting radios are custom and moved out of the dark frame.** Targets/Tags now
+   sit in `.ir-modeRow`: the `.ir-modePick` radio is a flex sibling *outside* the
+   `<details>`, so it stays fully visible when the section is dimmed. The radio is a
+   native `input[type=radio]` styled by `.ir-modeRadio` (`appearance:none`, round
+   `0.14em solid currentColor` border, `#00a4dc` inner dot when checked) because
+   `emby-radio` is not on the dashboard route.
+3. **Move down added.** `up`/`down` are wrapped in `.ir-ruleMoves` and disable at the
+   ends of the list. `#addRuleBtn` got `margin-bottom: 1.5em` so it is not glued to Save.
+4. **Localization scaffolding (Weblate-ready).** UI strings are flat JSON keys in
+   `Jellyfin.Plugin.IntroReplacer/Localization/en.json` (source language, embedded in the
+   DLL via `<EmbeddedResource Include="Localization\*.json" />`). `Services/
+   PluginLocalization` resolves a locale (`pt-BR` → `pt` → `en`) and serves it from
+   `GET /IntroReplacer/Localization?lang=…` as `{ Culture, Strings }`. The config page
+   fetches it once before rendering, then uses `t('key')`, `tf('key', vars)` and
+   `tn('key', n)` (`.one`/`.other` plural keys); static markup carries `data-i18n`,
+   `data-i18n-html`, `data-i18n-label`, `data-i18n-title`. The controller's seven
+   `BadRequest` messages now go through `L(key)` using `Accept-Language`.
+   `Localization/README.md` documents the Weblate component (JSON file, base `en.json`,
+   mask `*/Localization/*.json`). Adding a language is dropping in `<code>.json` — no code
+   change. New `LocalizationTests` (4 tests): English loads, every `t/tf/tn`,
+   `countPart` and `data-i18n*` key in config.html exists, plural pairs are complete,
+   unknown cultures fall back to `en`.
+5. **Verification.** `dotnet build` clean, `dotnet test` **42/42**, jsdom smoke updated
+   for the trash buttons, the out-of-frame radios and Move down (passes). Deployed to the
+   10.10.7 container: `GET /IntroReplacer/Localization?lang=en-US` returns
+   `{"Culture":"en","Strings":{…}}`, an `Accept-Language: it-IT` request (no `it.json`
+   yet) correctly falls back to `en`, the served page contains the `data-i18n`
+   attributes, and `/IntroReplacer/Test` + `/Items/{id}/Intros` still return the Pokémon
+   rule/intro for the verified episode.
+
 ## 4. Automatic intro detection — status
 
 - **Chapters: implemented** (`IntroChapterDetector`) and unit-tested. It is read-only
@@ -454,6 +490,9 @@ route `[controller]` → `/IntroReplacer/...`):
   carries `Library` and the picker groups by it.
 - `GET /Users`, `GET /Targets` (library → series → seasons → episodes tree; movies are
   direct children of their library).
+- `GET /Localization?lang=` — flat translation dictionary for the dashboard page.
+  Resolves the locale to the closest embedded `Localization/<code>.json`, falling back
+  to `en`; returns `{ Culture, Strings }`. Adding a language needs no code change.
 - `POST /Test/{itemId}?userId=` — evaluate rules without playing.
 
 Config is saved through Jellyfin's standard `get/updatePluginConfiguration`.
@@ -478,6 +517,10 @@ Config is saved through Jellyfin's standard `get/updatePluginConfiguration`.
 - `Services/IntroSegmentHelper.cs` — apply `Replace`/`Prepend`.
 - `Services/IntroSessionTracker.cs` — pure, unit-tested; wait-time + once-per-session
   bookkeeping (`Plugin.cs` wires `ISessionManager.SessionEnded` into it).
+- `Services/PluginLocalization.cs` — embedded-JSON localization (locale resolution +
+  fallback); feeds `/Localization` and the controller's `BadRequest` messages.
+- `Localization/en.json` — source language strings (Weblate-ready flat JSON);
+  `Localization/README.md` documents the Weblate component and translator rules.
 - `Api/IntroReplacerController.cs` — REST endpoints.
 - `Configuration/config.html` — dashboard page (inline JS, no external controller).
   Follows the vanilla Control Panel markup: a `<form>` (which the global

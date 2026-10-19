@@ -114,6 +114,22 @@ library and scan. Open the plugin's dashboard page, upload the sample intro,
 and add a rule (e.g. target the test series). Play the episode: the intro plays
 first, then the episode starts.
 
+## Translations
+
+The dashboard page and the plugin's API messages are localized. Strings live in
+[`Jellyfin.Plugin.IntroReplacer/Localization/`](Jellyfin.Plugin.IntroReplacer/Localization)
+as flat JSON files — `en.json` is the source language and any other file is named after
+the Jellyfin locale (`it.json`, `de.json`, `pt-BR.json`, …). The files are embedded in
+the DLL, so **adding a language needs no code change**: copy `en.json`, translate the
+values (keep the keys and `{placeholders}` unchanged) and rebuild. The plugin resolves
+the admin's locale (`pt-BR` → `pt` → `en`) and falls back to English for missing keys.
+
+The folder is shaped for [Weblate](https://weblate.org) as a monolingual *JSON file*
+component (base file `en.json`, mask `*/Localization/*.json`). See
+[`Localization/README.md`](Jellyfin.Plugin.IntroReplacer/Localization/README.md) for the
+component settings and the translator rules (plural `.one`/`.other` keys, the one HTML
+string, and which technical values must not be translated).
+
 ## License
 
 GPL-3.0 (see Jellyfin plugin conventions). Owner: `flaconia`.

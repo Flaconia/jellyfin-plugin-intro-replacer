@@ -93,21 +93,63 @@
         }
 
         /* Targets/Tags are alternative targeting methods: a radio selects one, the
-           other is greyed out, compressed and cannot be opened. */
+           other is greyed out, compressed and cannot be opened. The radio sits
+           outside the dark section frame so it stays fully visible. */
+        .ir-modeRow {
+            display: flex;
+            align-items: flex-start;
+            gap: 0.4em;
+            margin: 0.5em 0;
+        }
+
+        .ir-modeRow > .ir-collapse {
+            flex: 1 1 auto;
+            min-width: 0;
+            margin: 0 !important;
+        }
+
         .ir-modePick {
             display: inline-flex;
             align-items: center;
+            justify-content: center;
             flex: 0 0 auto;
-            margin-right: 0.6em;
+            width: 2.2em;
+            height: 2.6em;
+            margin: 0;
             cursor: pointer;
         }
 
         .ir-modeRadio {
-            margin: 0;
+            appearance: none;
+            -webkit-appearance: none;
+            box-sizing: border-box;
             width: 1.2em;
             height: 1.2em;
-            accent-color: #00a4dc;
+            margin: 0;
+            border: 0.14em solid currentColor;
+            border-radius: 50%;
+            background: transparent;
             cursor: pointer;
+            position: relative;
+            opacity: 0.9;
+        }
+
+        .ir-modeRadio:checked {
+            border-color: #00a4dc;
+            opacity: 1;
+        }
+
+        .ir-modeRadio:checked::after {
+            content: '';
+            position: absolute;
+            inset: 0.2em;
+            border-radius: 50%;
+            background: #00a4dc;
+        }
+
+        .ir-modeRadio:focus-visible {
+            outline: 0.14em solid #00a4dc;
+            outline-offset: 0.1em;
         }
 
         .ir-collapse.ir-modeOff {
@@ -136,6 +178,31 @@
         .ir-collapse.ir-modeOff > .ir-tree {
             display: none !important;
         }
+
+        /* Icon-only remove button used in the asset/intro rows, matching the
+           trash can Jellyfin shows next to removable metadata fields. */
+        .ir-trashButton {
+            flex: 0 0 auto;
+            margin: 0 0 0 0.5em !important;
+        }
+
+        .ir-assetRow > .ir-trashButton,
+        .ir-introRow > .ir-trashButton {
+            align-self: center;
+        }
+
+        /* Rule reordering buttons sit side by side; Add rule gets breathing room
+           before the Save section. */
+        .ir-ruleMoves {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 0.5em;
+        }
+
+        #addRuleBtn {
+            margin-bottom: 1.5em;
+        }
+
 
         .ir-collapseEnabled {
             flex: 0 0 auto;
@@ -304,28 +371,28 @@
             <form id="introReplacerForm">
                 <div class="verticalSection">
                     <div class="sectionTitleContainer flex align-items-center">
-                        <h1 class="pageTitle">Intro Replacer</h1>
+                        <h1 class="pageTitle" data-i18n="page.title">Intro Replacer</h1>
                     </div>
-                    <p class="fieldDescription">
+                    <p class="fieldDescription" data-i18n="page.subtitle">
                         Plays a custom intro before the episode or movie you start, then lets you
                         skip the item's own intro.
                     </p>
                 </div>
 
                 <div class="verticalSection">
-                    <h2 class="sectionTitle">Settings</h2>
+                    <h2 class="sectionTitle" data-i18n="settings.title">Settings</h2>
 
                     <div class="checkboxContainer" id="moviesOnlyRow">
                         <label>
                             <input type="checkbox" is="emby-checkbox" id="moviesOnly" />
-                            <span>Only play intros for movies</span>
+                            <span data-i18n="settings.moviesOnly">Only play intros for movies</span>
                         </label>
                     </div>
                 </div>
 
                 <div class="verticalSection">
-                    <h2 class="sectionTitle">Intro files</h2>
-                    <p class="fieldDescription">
+                    <h2 class="sectionTitle" data-i18n="introFiles.title">Intro files</h2>
+                    <p class="fieldDescription" data-i18n="introFiles.help">
                         Upload a video file, or pick any video that is already in one of your libraries.
                         Nothing is copied and your media is never modified.
                     </p>
@@ -333,10 +400,12 @@
                     <div class="inputContainer">
                         <div class="flex align-items-center">
                             <div class="flex-grow-1">
-                                <input type="text" is="emby-input" id="introFolder" label="Intro folder (container path, empty = plugin default)" />
+                                <input type="text" is="emby-input" id="introFolder"
+                                       label="Intro folder (container path, empty = plugin default)"
+                                       data-i18n-label="introFolder.label" />
                             </div>
                             <button type="button" is="emby-button" id="applyFolderBtn" class="raised ir-folderButton">
-                                <span>Change folder</span>
+                                <span data-i18n="introFolder.change">Change folder</span>
                             </button>
                         </div>
                         <div class="fieldDescription" id="introFolderInfo"></div>
@@ -344,10 +413,10 @@
 
                     <div class="inputContainer">
                         <button type="button" is="emby-button" id="uploadBtn" class="raised">
-                            <span>Upload intro…</span>
+                            <span data-i18n="introFiles.upload">Upload intro…</span>
                         </button>
                         <button type="button" is="emby-button" id="pickVideoBtn" class="raised">
-                            <span>Add a video from a library…</span>
+                            <span data-i18n="introFiles.addFromLibrary">Add a video from a library…</span>
                         </button>
                         <input type="file" id="uploadFile" accept="video/*" class="hide" />
                     </div>
@@ -356,8 +425,8 @@
                 </div>
 
                 <div class="verticalSection">
-                    <h2 class="sectionTitle">Rules</h2>
-                    <p class="fieldDescription">
+                    <h2 class="sectionTitle" data-i18n="rules.title">Rules</h2>
+                    <p class="fieldDescription" data-i18n-html="rules.help">
                         Rules are evaluated from top to bottom and the first enabled rule that matches
                         wins. A rule with no condition matches every item. <em>Replace</em> lets the
                         client skip the item's own intro, <em>Prepend</em> plays the item from the start.
@@ -366,13 +435,13 @@
                     <div id="ruleList"></div>
 
                     <button type="button" is="emby-button" id="addRuleBtn" class="raised">
-                        <span>Add rule</span>
+                        <span data-i18n="rules.add">Add rule</span>
                     </button>
                 </div>
 
                 <div class="verticalSection">
                     <button type="submit" is="emby-button" id="saveBtn" class="raised button-submit block">
-                        <span>Save</span>
+                        <span data-i18n="common.save">Save</span>
                     </button>
                 </div>
             </form>
@@ -387,6 +456,62 @@
             let targets = [];
             let videos = [];
             let assetExists = {};
+            let strings = {};
+
+            // Translation helpers. Values use {name} placeholders; plural keys are
+            // suffixed .one/.other (Weblate-friendly flat JSON).
+            const t = (key) => strings[key] || key;
+
+            const tf = (key, vars) => {
+                let text = t(key);
+                Object.keys(vars || {}).forEach(name => {
+                    text = text.split('{' + name + '}').join(String(vars[name]));
+                });
+                return text;
+            };
+
+            const tn = (key, count, vars) =>
+                tf(key + (count === 1 ? '.one' : '.other'), { ...(vars || {}), count });
+
+            const loadLocalization = async () => {
+                let locale = '';
+                try {
+                    locale = ApiClient.getCurrentLocale ? ApiClient.getCurrentLocale() : '';
+                } catch (e) {
+                    locale = '';
+                }
+                if (!locale) locale = navigator.language || 'en';
+
+                try {
+                    const data = await ApiClient.getJSON(api('/Localization?lang=' + encodeURIComponent(locale)));
+                    strings = (data && data.Strings) || {};
+                } catch (e) {
+                    strings = {};
+                }
+            };
+
+            // Static markup keeps English as a no-JS fallback; data-i18n* attributes
+            // are filled once the dictionary is available.
+            const applyStaticTranslations = () => {
+                if (Object.keys(strings).length === 0) return;
+
+                document.querySelectorAll('[data-i18n]').forEach(el => {
+                    el.textContent = t(el.getAttribute('data-i18n'));
+                });
+                document.querySelectorAll('[data-i18n-html]').forEach(el => {
+                    el.innerHTML = t(el.getAttribute('data-i18n-html'));
+                });
+                document.querySelectorAll('[data-i18n-label]').forEach(el => {
+                    const text = t(el.getAttribute('data-i18n-label'));
+                    el.setAttribute('label', text);
+                    // emby-input exposes a label() setter; call it if it already upgraded.
+                    if (typeof el.label === 'function') el.label(text);
+                });
+                document.querySelectorAll('[data-i18n-title]').forEach(el => {
+                    el.title = t(el.getAttribute('data-i18n-title'));
+                    el.setAttribute('aria-label', el.title);
+                });
+            };
 
             // Open/closed state of the collapsible rule cards and target lists,
             // keyed by rule id so it survives re-renders.
@@ -417,7 +542,7 @@
 
             const newRule = () => ({
                 Id: guid(),
-                Name: 'New rule',
+                Name: t('rule.new'),
                 Enabled: true,
                 TargetMode: 'Targets',
                 LibraryIds: [],
@@ -474,6 +599,17 @@
             const button = (text, onClick) => {
                 const btn = elem('<button type="button" is="emby-button" class="raised"><span></span></button>');
                 btn.querySelector('span').textContent = text;
+                btn.addEventListener('click', onClick);
+                return btn;
+            };
+
+            // Vanilla Jellyfin trash-can icon button (same markup as the metadata
+            // editor uses next to removable fields).
+            const trashButton = (title, onClick) => {
+                const btn = elem(
+                    '<button type="button" is="paper-icon-button-light" class="ir-trashButton" '
+                    + 'title="' + escapeHtml(title) + '" aria-label="' + escapeHtml(title) + '">'
+                    + '<span class="material-icons delete" aria-hidden="true"></span></button>');
                 btn.addEventListener('click', onClick);
                 return btn;
             };
@@ -550,7 +686,7 @@
                 const wrap = elem(
                     '<div class="ir-tip">'
                     + '<button type="button" is="paper-icon-button-light" class="ir-tipButton" '
-                    + 'aria-label="More information">'
+                    + 'aria-label="' + escapeHtml(t('common.moreInfo')) + '">'
                     + '<span class="material-icons help_outline" aria-hidden="true"></span>'
                     + '</button>'
                     + '<div class="ir-tipBubble" role="tooltip"></div>'
@@ -566,10 +702,12 @@
                     '<div class="inputContainer">'
                     + '<div class="ir-stepper">'
                     + '<input type="number" is="emby-input" min="1" max="99999" '
-                    + 'label="Time to wait before the intro plays again (minutes)" />'
-                    + '<button type="button" is="paper-icon-button-light" title="One minute less">'
+                    + 'label="' + escapeHtml(t('rule.wait')) + '" />'
+                    + '<button type="button" is="paper-icon-button-light" title="'
+                    + escapeHtml(t('rule.wait.less')) + '">'
                     + '<span class="material-icons remove" aria-hidden="true"></span></button>'
-                    + '<button type="button" is="paper-icon-button-light" title="One minute more">'
+                    + '<button type="button" is="paper-icon-button-light" title="'
+                    + escapeHtml(t('rule.wait.more')) + '">'
                     + '<span class="material-icons add" aria-hidden="true"></span></button>'
                     + '</div>'
                     + '</div>');
@@ -601,12 +739,9 @@
                 if (!introFolder) return;
                 const input = document.querySelector('#introFolder');
                 input.value = introFolder.Configured || '';
-                document.querySelector('#introFolderInfo').textContent =
-                    'Files are stored in ' + introFolder.Effective
-                    + (introFolder.IsDefault ? ' (plugin default).' : '.')
-                    + ' This is the path inside the Jellyfin container: mount the host folder'
-                    + ' into the container first (Docker volume), and use a dedicated folder,'
-                    + ' not a media library root. Files copied into it are added automatically.';
+                const stored = tf(introFolder.IsDefault ? 'folder.storedDefault' : 'folder.stored',
+                    { path: introFolder.Effective });
+                document.querySelector('#introFolderInfo').textContent = stored + ' ' + t('folder.hint');
             };
 
             const loadFolder = async () => {
@@ -624,7 +759,7 @@
                 }).then(async (response) => {
                     if (!response.ok) {
                         const text = await response.text();
-                        throw new Error(text || 'Could not change the folder.');
+                        throw new Error(text || t('folder.changeFailed'));
                     }
                     introFolder = await response.json();
                     config.IntroFolder = introFolder.Configured || '';
@@ -632,7 +767,7 @@
                     renderFolder();
                 }).catch((error) => {
                     document.querySelector('#introFolderInfo').textContent =
-                        error.message || 'Could not change the folder.';
+                        error.message || t('folder.changeFailed');
                 }).finally(() => Dashboard.hideLoadingMsg());
             };
 
@@ -715,16 +850,16 @@
 
             const describeAsset = (asset) => asset.Name
                 + (asset.LibraryItemId && asset.LibraryItemId !== '00000000-0000-0000-0000-000000000000'
-                    ? ' (from a library)'
+                    ? t('asset.fromLibrary')
                     : '')
-                + (assetExists[asset.Id] ? '' : ' (missing)');
+                + (assetExists[asset.Id] ? '' : t('asset.missing'));
 
             const renderAssets = () => {
                 const host = document.querySelector('#assetList');
                 host.innerHTML = '';
                 if (config.Assets.length === 0) {
-                    host.innerHTML = '<p class="fieldDescription">'
-                        + 'No intro videos yet. Upload one, or add a video from a library.</p>';
+                    host.innerHTML = '<p class="fieldDescription"></p>';
+                    host.querySelector('p').textContent = t('assets.empty');
                     return;
                 }
 
@@ -738,7 +873,7 @@
                     name.textContent = describeAsset(asset);
                     row.appendChild(name);
 
-                    row.appendChild(button('Remove', () => deleteAsset(asset.Id)));
+                    row.appendChild(trashButton(t('common.remove'), () => deleteAsset(asset.Id)));
                     list.appendChild(row);
                 });
                 host.appendChild(list);
@@ -780,23 +915,25 @@
                     '<div class="dialogContainer">'
                     + '<div class="dialog dialog-fixedSize dialog-small formDialog paperList" modal="modal">'
                     + '<div class="formDialogHeader">'
-                    + '<button type="button" is="paper-icon-button-light" class="btnCancel autoSize" tabindex="-1" title="Back">'
+                    + '<button type="button" is="paper-icon-button-light" class="btnCancel autoSize" tabindex="-1" title="'
+                    + escapeHtml(t('common.back')) + '">'
                     + '<span class="material-icons arrow_back" aria-hidden="true"></span></button>'
-                    + '<h3 class="formDialogHeaderTitle">Add a video from a library</h3>'
+                    + '<h3 class="formDialogHeaderTitle">' + escapeHtml(t('picker.title')) + '</h3>'
                     + '</div>'
                     + '<div class="formDialogContent smoothScrollY">'
                     + '<div class="dialogContentInner dialog-content-centered">'
                     + '<div class="inputContainer">'
-                    + '<input type="text" is="emby-input" id="irPickFilter" label="Filter" />'
+                    + '<input type="text" is="emby-input" id="irPickFilter" label="'
+                    + escapeHtml(t('picker.filter')) + '" />'
                     + '</div>'
                     + '<div id="irPickList"></div>'
                     + '</div>'
                     + '</div>'
                     + '<div class="formDialogFooter">'
                     + '<button type="button" is="emby-button" id="irPickOk" class="raised button-submit block formDialogFooterItem ir-pickRowOk" disabled>'
-                    + '<span>Add as intro</span></button>'
+                    + '<span>' + escapeHtml(t('picker.add')) + '</span></button>'
                     + '<button type="button" is="emby-button" id="irPickCancel" class="raised block formDialogFooterItem">'
-                    + '<span>Cancel</span></button>'
+                    + '<span>' + escapeHtml(t('common.cancel')) + '</span></button>'
                     + '</div>'
                     + '</div>'
                     + '</div>');
@@ -815,9 +952,9 @@
 
                     list.innerHTML = '';
                     if (matches.length === 0) {
-                        list.innerHTML = '<p class="fieldDescription">'
-                            + (videos.length === 0 ? 'No videos found in your libraries.' : 'Nothing matches that filter.')
-                            + '</p>';
+                        list.innerHTML = '<p class="fieldDescription"></p>';
+                        list.querySelector('p').textContent =
+                            videos.length === 0 ? t('picker.noVideos') : t('picker.noMatches');
                         return;
                     }
 
@@ -831,7 +968,7 @@
                         const header = document.createElement('div');
                         header.className = 'checkboxListLabel';
                         header.style.margin = '0.75em 0 0.25em';
-                        header.textContent = name + ' — ' + total + (total === 1 ? ' video' : ' videos');
+                        header.textContent = tn('picker.group', total, { library: name });
                         list.appendChild(header);
                         group = document.createElement('div');
                         list.appendChild(group);
@@ -866,8 +1003,10 @@
                     });
 
                     if (rendered < matches.length) {
-                        list.appendChild(hint('Showing the first ' + rendered + ' of ' + matches.length
-                            + ' matches — type more to narrow the list down.'));
+                        list.appendChild(hint(tf('picker.limit', {
+                            rendered,
+                            total: matches.length
+                        })));
                     }
                 };
 
@@ -905,7 +1044,7 @@
                 wrap.className = 'ir-introRows';
 
                 if (config.Assets.length === 0) {
-                    wrap.appendChild(hint('Upload an intro file first.'));
+                    wrap.appendChild(hint(t('assets.noneForRule')));
                     return wrap;
                 }
 
@@ -941,7 +1080,7 @@
                         rule.AssetIds[index] = value;
                         rerender();
                     });
-                    row.appendChild(button('Remove', () => {
+                    row.appendChild(trashButton(t('common.remove'), () => {
                         rule.AssetIds.splice(index, 1);
                         rerender();
                     }));
@@ -957,7 +1096,9 @@
                     });
                     const placeholder = document.createElement('option');
                     placeholder.value = '';
-                    placeholder.textContent = rule.AssetIds.length === 0 ? '(add)' : '(add another…)';
+                    placeholder.textContent = rule.AssetIds.length === 0
+                        ? t('rule.intro.add')
+                        : t('rule.intro.addAnother');
                     row.querySelector('select').insertBefore(placeholder, row.querySelector('select').firstChild);
                     placeholder.selected = true;
                     wrap.appendChild(row);
@@ -1002,7 +1143,10 @@
                 const title = document.createElement('h3');
                 title.className = 'ir-collapseTitle';
                 const updateTitle = () => {
-                    title.textContent = 'Rule ' + (index + 1) + ' — ' + (rule.Name || 'Untitled');
+                    title.textContent = tf('rule.title', {
+                        number: index + 1,
+                        name: rule.Name || t('rule.untitled')
+                    });
                     title.style.opacity = rule.Enabled ? '1' : '0.5';
                 };
                 updateTitle();
@@ -1041,13 +1185,15 @@
                 };
 
                 const updateScopeSummary = () => {
-                    const part = (n, singular, plural) => n > 0 ? n + ' ' + (n === 1 ? singular : plural) : null;
+                    const countPart = (n, key) => n > 0 ? tn(key, n) : null;
+                    const joinParts = (parts) => parts.filter(p => p).join(t('scope.separator'));
 
                     if (rule.TargetMode === 'Tags') {
+                        const mode = t('rule.tags');
                         const conditions = tagConditions();
                         if (!conditions.include.length && !conditions.exclude.length
                             && !conditions.genres.length && !conditions.studios.length) {
-                            scopeInfo.textContent = 'Tags — all items';
+                            scopeInfo.textContent = tf('rule.scope.all', { mode });
                             return;
                         }
 
@@ -1064,15 +1210,18 @@
                             }));
                         }));
 
-                        const parts = [
-                            part(episodes, 'episode', 'episodes'),
-                            part(movies, 'movie', 'movies')
-                        ].filter(p => p);
+                        const parts = joinParts([
+                            countPart(episodes, 'scope.episode'),
+                            countPart(movies, 'scope.movie')
+                        ]);
 
-                        scopeInfo.textContent = 'Tags — ' + (parts.length > 0 ? parts.join(', ') : 'no matching items');
+                        scopeInfo.textContent = parts.length > 0
+                            ? tf('rule.scope.parts', { mode, parts })
+                            : tf('rule.scope.noneTags', { mode });
                         return;
                     }
 
+                    const mode = t('rule.targets');
                     const count = { libraries: 0, series: 0, seasons: 0, episodes: 0, movies: 0 };
 
                     if (rule.ExcludedLibraryIds.length > 0) {
@@ -1100,19 +1249,21 @@
                         });
                     });
 
-                    const parts = [
-                        part(count.libraries, 'library', 'libraries'),
-                        part(count.series, 'series', 'series'),
-                        part(count.seasons, 'season', 'seasons'),
-                        part(count.episodes, 'episode', 'episodes'),
-                        part(count.movies, 'movie', 'movies')
-                    ].filter(p => p);
+                    const parts = joinParts([
+                        countPart(count.libraries, 'scope.library'),
+                        countPart(count.series, 'scope.series'),
+                        countPart(count.seasons, 'scope.season'),
+                        countPart(count.episodes, 'scope.episode'),
+                        countPart(count.movies, 'scope.movie')
+                    ]);
 
                     const empty = rule.TargetItemIds.length === 0 && rule.ExcludedLibraryIds.length === 0;
-                    scopeInfo.textContent = 'Targets — ' + (parts.length > 0 ? parts.join(', ') : (empty ? 'all items' : 'no items'));
+                    scopeInfo.textContent = parts.length > 0
+                        ? tf('rule.scope.parts', { mode, parts })
+                        : tf(empty ? 'rule.scope.all' : 'rule.scope.noneTargets', { mode });
                 };
 
-                const enabled = checkbox('Enabled', rule.Enabled, v => { rule.Enabled = v; updateTitle(); });
+                const enabled = checkbox(t('rule.enabled'), rule.Enabled, v => { rule.Enabled = v; updateTitle(); });
                 enabled.classList.add('ir-collapseEnabled');
                 // Keep clicks on the checkbox from collapsing/expanding the rule.
                 enabled.addEventListener('click', e => e.stopPropagation());
@@ -1125,7 +1276,7 @@
                 body.className = 'ir-collapseBody';
                 card.appendChild(body);
 
-                body.appendChild(textField('Name', rule.Name, v => { rule.Name = v; updateTitle(); }));
+                body.appendChild(textField(t('rule.name'), rule.Name, v => { rule.Name = v; updateTitle(); }));
 
                 // users
                 const userWrap = checkboxList();
@@ -1137,9 +1288,9 @@
                     }));
                 });
                 if (users.length === 0) {
-                    userWrap.appendChild(elem('<div class="fieldDescription">No users found.</div>'));
+                    userWrap.appendChild(hint(t('rule.noUsers')));
                 }
-                body.appendChild(field('Active for users (empty = all)', userWrap));
+                body.appendChild(field(t('rule.users'), userWrap));
 
                 // intros (compact: only the chosen ones, plus an "(add)" dropdown)
                 const introHost = document.createElement('div');
@@ -1148,20 +1299,20 @@
                     introHost.appendChild(introRowList(rule, renderIntros));
                 };
                 renderIntros();
-                body.appendChild(field('Intros', introHost));
+                body.appendChild(field(t('rule.intros'), introHost));
 
-                body.appendChild(selectField('Playback',
-                    [{ value: 'RandomOne', label: 'Play one random intro' },
-                     { value: 'SequentialAll', label: 'Play all selected intros in order' }],
+                body.appendChild(selectField(t('rule.playback'),
+                    [{ value: 'RandomOne', label: t('rule.playback.random') },
+                     { value: 'SequentialAll', label: t('rule.playback.sequential') }],
                     rule.PlaybackMode,
                     v => rule.PlaybackMode = v));
 
-                const placement = selectField('What to do with the item\'s own intro',
-                    [{ value: 'Replace', label: 'Replace it (the client can skip the original intro)' },
-                     { value: 'Prepend', label: 'Prepend (play the item from the beginning)' }],
+                const placement = selectField(t('rule.placement'),
+                    [{ value: 'Replace', label: t('rule.placement.replace') },
+                     { value: 'Prepend', label: t('rule.placement.prepend') }],
                     rule.Placement,
                     v => rule.Placement = v,
-                    'Replace adds an "Intro" segment so the client can skip the original intro (it shows a Skip button). For hands-free skipping, set Playback -> Media Segment Actions -> Intro Segments -> Skip in the client. Prepend removes those markers so the item plays from the start.');
+                    t('rule.placement.tip'));
                 body.appendChild(placement);
 
                 // The wait time is per rule; only relevant for the "wait time" frequency.
@@ -1169,13 +1320,13 @@
                 const syncMinutes = () => {
                     minutes.style.display = rule.Frequency === 'OncePerInterval' ? '' : 'none';
                 };
-                const frequency = selectField('Frequency',
-                    [{ value: 'EveryTime', label: 'Every time you start an episode or movie' },
-                     { value: 'OncePerInterval', label: 'Only after the wait time has passed' },
-                     { value: 'OncePerSession', label: 'Once per session (until you disconnect)' }],
+                const frequency = selectField(t('rule.frequency'),
+                    [{ value: 'EveryTime', label: t('rule.frequency.everyTime') },
+                     { value: 'OncePerInterval', label: t('rule.frequency.interval') },
+                     { value: 'OncePerSession', label: t('rule.frequency.session') }],
                     rule.Frequency,
                     v => { rule.Frequency = v; syncMinutes(); },
-                    '"Every time" plays before the title you start; if you start a list, it plays before the first title only. "Only after the wait time" replays it once the minutes set just below have passed. "Once per session" replays it after you close the app or sign out.');
+                    t('rule.frequency.tip'));
                 body.appendChild(frequency);
                 syncMinutes();
                 body.appendChild(minutes);
@@ -1185,22 +1336,20 @@
                 const modePick = (value, label) => {
                     const wrap = document.createElement('label');
                     wrap.className = 'ir-modePick';
-                    wrap.title = 'Use ' + label + ' to choose the items this rule applies to';
+                    const hintText = tf('rule.modePick', { label });
+                    wrap.title = hintText;
                     const input = document.createElement('input');
                     input.type = 'radio';
                     input.className = 'ir-modeRadio';
                     input.name = 'ir-mode-' + rule.Id;
                     input.value = value;
                     input.checked = rule.TargetMode === value;
-                    input.addEventListener('click', e => e.stopPropagation());
+                    input.setAttribute('aria-label', hintText);
                     input.addEventListener('change', () => {
                         if (!input.checked) return;
                         rule.TargetMode = value;
                         syncMode(true);
                     });
-                    // The radio lives in a <summary>: keep its clicks from collapsing or
-                    // expanding the section (which is also locked while inactive).
-                    wrap.addEventListener('click', e => e.stopPropagation());
                     wrap.appendChild(input);
                     return wrap;
                 };
@@ -1219,22 +1368,12 @@
                 });
 
                 const targetSummary = document.createElement('summary');
-                const targetPick = modePick('Targets', 'Targets');
+                const targetPick = modePick('Targets', t('rule.targets'));
                 const targetRadio = targetPick.querySelector('input');
-                targetSummary.appendChild(targetPick);
-                targetSummary.addEventListener('click', (e) => {
-                    if (rule.TargetMode === 'Tags' && !e.target.closest('.ir-modePick')) e.preventDefault();
-                });
-                targetSummary.addEventListener('keydown', (e) => {
-                    if (rule.TargetMode === 'Tags' && !e.target.closest('.ir-modePick')
-                        && (e.key === 'Enter' || e.key === ' ')) {
-                        e.preventDefault();
-                    }
-                });
 
                 const targetTitle = document.createElement('h3');
                 targetTitle.className = 'ir-collapseTitle';
-                targetTitle.textContent = 'Targets';
+                targetTitle.textContent = t('rule.targets');
                 targetSummary.appendChild(targetTitle);
                 targetSummary.appendChild(elem('<span class="material-icons" aria-hidden="true">expand_more</span>'));
 
@@ -1243,7 +1382,7 @@
                 treeHost.style.maxHeight = '22em';
                 treeHost.style.overflow = 'auto';
                 treeHost.style.marginTop = '0.5em';
-                treeHost.appendChild(hint('Everything is active by default. Uncheck a library, series, season or episode to leave it out; unchecking a level hides the ones under it.'));
+                treeHost.appendChild(hint(t('rule.tree.help')));
 
                 const refreshTree = () => {
                     treeHost.querySelectorAll('.ir-treeNode').forEach(n => n.remove());
@@ -1258,7 +1397,16 @@
 
                 targetBox.appendChild(targetSummary);
                 targetBox.appendChild(treeHost);
-                body.appendChild(targetBox);
+                // The radio is outside the dark section frame; clicking the header of
+                // an inactive section must not open it.
+                targetSummary.addEventListener('click', (e) => {
+                    if (rule.TargetMode === 'Tags') e.preventDefault();
+                });
+                const targetRow = document.createElement('div');
+                targetRow.className = 'ir-modeRow';
+                targetRow.appendChild(targetPick);
+                targetRow.appendChild(targetBox);
+                body.appendChild(targetRow);
 
                 // tags (collapsible like Targets; tags are matched against the item
                 // and its ancestors)
@@ -1275,46 +1423,43 @@
                 });
 
                 const tagsSummary = document.createElement('summary');
-                const tagsPick = modePick('Tags', 'Tags');
+                const tagsPick = modePick('Tags', t('rule.tags'));
                 const tagsRadio = tagsPick.querySelector('input');
-                tagsSummary.appendChild(tagsPick);
-                tagsSummary.addEventListener('click', (e) => {
-                    if (rule.TargetMode === 'Targets' && !e.target.closest('.ir-modePick')) e.preventDefault();
-                });
-                tagsSummary.addEventListener('keydown', (e) => {
-                    if (rule.TargetMode === 'Targets' && !e.target.closest('.ir-modePick')
-                        && (e.key === 'Enter' || e.key === ' ')) {
-                        e.preventDefault();
-                    }
-                });
 
                 const tagsTitle = document.createElement('h3');
                 tagsTitle.className = 'ir-collapseTitle';
-                tagsTitle.textContent = 'Tags';
+                tagsTitle.textContent = t('rule.tags');
                 tagsSummary.appendChild(tagsTitle);
                 tagsSummary.appendChild(elem('<span class="material-icons" aria-hidden="true">expand_more</span>'));
                 tagsBox.appendChild(tagsSummary);
+                tagsSummary.addEventListener('click', (e) => {
+                    if (rule.TargetMode === 'Targets') e.preventDefault();
+                });
 
                 const tagsBody = document.createElement('div');
                 tagsBody.className = 'ir-collapseBody';
-                tagsBody.appendChild(textField('Include tags (comma separated)', csv(rule.IncludeTags), v => {
+                tagsBody.appendChild(textField(t('rule.tags.include'), csv(rule.IncludeTags), v => {
                     rule.IncludeTags = parseCsv(v);
                     updateScopeSummary();
-                }, 'Items containing these tags are included in the rule. Exclude tags take priority: an item carrying an exclude tag is left out. Tags are matched against the item and its parent series/season, and any one of them is enough.'));
-                tagsBody.appendChild(textField('Exclude tags (comma separated)', csv(rule.ExcludeTags), v => {
+                }, t('rule.tags.include.tip')));
+                tagsBody.appendChild(textField(t('rule.tags.exclude'), csv(rule.ExcludeTags), v => {
                     rule.ExcludeTags = parseCsv(v);
                     updateScopeSummary();
                 }));
-                tagsBody.appendChild(textField('Genres (comma separated)', csv(rule.Genres), v => {
+                tagsBody.appendChild(textField(t('rule.tags.genres'), csv(rule.Genres), v => {
                     rule.Genres = parseCsv(v);
                     updateScopeSummary();
                 }));
-                tagsBody.appendChild(textField('Studios (comma separated)', csv(rule.Studios), v => {
+                tagsBody.appendChild(textField(t('rule.tags.studios'), csv(rule.Studios), v => {
                     rule.Studios = parseCsv(v);
                     updateScopeSummary();
                 }));
                 tagsBox.appendChild(tagsBody);
-                body.appendChild(tagsBox);
+                const tagsRow = document.createElement('div');
+                tagsRow.className = 'ir-modeRow';
+                tagsRow.appendChild(tagsPick);
+                tagsRow.appendChild(tagsBox);
+                body.appendChild(tagsRow);
 
                 // Grey out and lock the method that is not selected. Its content stays
                 // in the rule and comes back when the radio is switched back.
@@ -1337,15 +1482,27 @@
                 };
                 syncMode(false);
 
-                const up = button('Move up', () => {
+                const moves = document.createElement('div');
+                moves.className = 'ir-ruleMoves';
+
+                const up = button(t('rule.moveUp'), () => {
                     const [r] = config.Rules.splice(index, 1);
                     config.Rules.splice(index - 1, 0, r);
                     renderRules();
                 });
                 up.disabled = index === 0;
-                body.appendChild(up);
+                moves.appendChild(up);
 
-                body.appendChild(button('Remove rule', () => {
+                const down = button(t('rule.moveDown'), () => {
+                    const [r] = config.Rules.splice(index, 1);
+                    config.Rules.splice(index + 1, 0, r);
+                    renderRules();
+                });
+                down.disabled = index === config.Rules.length - 1;
+                moves.appendChild(down);
+                body.appendChild(moves);
+
+                body.appendChild(button(t('rule.remove'), () => {
                     config.Rules.splice(index, 1);
                     renderRules();
                 }));
@@ -1517,11 +1674,14 @@
                 }
             });
 
-            document.querySelector('#moviesOnlyRow').appendChild(infoTip(
-                'Turning this on skips episodes and seasons. Some TV and mobile apps do not '
-                + 'ask for intros on episodes anyway, while movies work everywhere.'));
+            const init = async () => {
+                await loadLocalization();
+                applyStaticTranslations();
+                document.querySelector('#moviesOnlyRow').appendChild(infoTip(t('settings.moviesOnly.tip')));
+                await load();
+            };
 
-            load();
+            init();
         })();
     </script>
 </div>

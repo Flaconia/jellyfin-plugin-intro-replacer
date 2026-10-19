@@ -122,7 +122,9 @@ docker compose -f docker/compose.yaml up -d                          # then rest
 - `Services/IntroSegmentProvider.cs` — `IMediaSegmentProvider` exposing the chapter-based Intro segment.
 - `Services/IntroSegmentHelper.cs` — applies `Replace`/`Prepend` to `Intro` media segments.
 - `Services/IntroSessionTracker.cs` — intro-repeat bookkeeping (wait-time + once-per-session); pure, unit-tested, no Jellyfin types.
-- `Api/IntroReplacerController.cs` — REST: `/IntroReplacer/Assets` (list/upload/delete), `/IntroReplacer/Assets/FromLibrary/{itemId}` (use an existing library video as an intro), `/IntroReplacer/IntroFolder` (get/set the intro storage folder), `/Videos` (every video in every library, for that picker), `/Users`, `/Targets` (library → series → seasons → episodes tree, movies as direct library children), `/Test/{itemId}`.
+- `Services/PluginLocalization.cs` — embedded-JSON localization: resolves a locale to the closest `Localization/<code>.json` (`pt-BR` → `pt` → `en`) and serves `GET /IntroReplacer/Localization`.
+- `Localization/en.json` — source strings (flat JSON, Weblate-compatible). `Localization/README.md` documents the Weblate component and translator rules. Adding a language is dropping in `<code>.json`; no code change.
+- `Api/IntroReplacerController.cs` — REST: `/IntroReplacer/Assets` (list/upload/delete), `/IntroReplacer/Assets/FromLibrary/{itemId}` (use an existing library video as an intro), `/IntroReplacer/IntroFolder` (get/set the intro storage folder), `/IntroReplacer/Videos` (every video in every library, for that picker), `/IntroReplacer/Users`, `/IntroReplacer/Targets` (library → series → seasons → episodes tree, movies as direct library children), `/IntroReplacer/Localization` (UI strings), `/IntroReplacer/Test/{itemId}`.
 - `Configuration/config.html` — dashboard page. Inline `<script>` (no external controller file); talks to the endpoints above and to Jellyfin's standard `get/updatePluginConfiguration`. Follows the vanilla Control Panel markup (`<form>` limited to 54em, `h1.pageTitle`, `h2.sectionTitle`, `inputContainer`/`checkboxContainer`/`checkboxList`, `raised` buttons, `raised button-submit block` Save); the library-video picker is a hand-built `.dialogContainer > .dialog.formDialog` modal — plugin pages **cannot** `require` `dialogHelper` (no `window.require`/`window.define` in 10.10).
 
 ## Conventions
@@ -180,5 +182,20 @@ docker compose -f docker/compose.yaml up -d                          # then rest
   remaining intros in alphabetical order. The Tags conditions live in their own
   collapsible `<details>` (`Include/Exclude tags`, `Genres`, `Studios`).
 - There is no `Chance`/probability field by design; ordering + conditions decide.
+- **Every user-facing string is localized.** UI text goes through `t('key')`
+  (exact), `tf('key', vars)` (`{name}` placeholders) or `tn('key', count)`
+  (plural, resolves `.one`/`.other`); keys live in
+  `Localization/en.json`. Static markup uses `data-i18n` / `data-i18n-html` /
+  `data-i18n-label` / `data-i18n-title`, filled by `applyStaticTranslations()`.
+  Never hardcode visible English. C# `BadRequest` messages use
+  `PluginLocalization.Get(key, Request.Headers.AcceptLanguage)`. Add new keys to
+  `en.json`; `LocalizationTests` fails if a `t/tf/tn`, `countPart` or
+  `data-i18n*` key is missing, so keep it green.
+- Remove buttons use `trashButton()` (`is="paper-icon-button-light"` +
+  `<span class="material-icons delete">`), matching the metadata editor. Rule
+  reordering is `up`/`down` in `.ir-ruleMoves`. Targeting radios are native
+  `input[type=radio]` styled by `.ir-modeRadio` and placed outside the section's
+  dark frame (`.ir-modeRow > .ir-modePick`); `emby-radio` is not on the dashboard
+  route.
 - Owner in `build.yaml`/`manifest.json` is `flaconia`. Before publishing to a plugin
   repository, fill in `sourceUrl`/`checksum` in `manifest.json`.

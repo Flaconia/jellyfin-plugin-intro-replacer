@@ -54,6 +54,9 @@ public class IntroReplacerController : ControllerBase
     private static IntroReplacerPlugin Plugin =>
         IntroReplacerPlugin.Instance ?? throw new InvalidOperationException("Plugin not initialized");
 
+    private string L(string key)
+        => PluginLocalization.Get(key, Request.Headers.AcceptLanguage.ToString());
+
     /// <summary>
     /// Lists registered intro assets and whether their file exists on disk. Files
     /// dropped into the intro folder are registered automatically on this call.
@@ -117,7 +120,7 @@ public class IntroReplacerController : ControllerBase
 
         if (!Path.IsPathFullyQualified(target))
         {
-            return BadRequest("Use an absolute folder path (for example /mnt/media/intros).");
+            return BadRequest(L("error.folder.absolute"));
         }
 
         try
@@ -133,7 +136,7 @@ public class IntroReplacerController : ControllerBase
         catch (Exception ex)
         {
             _logger.LogWarning(ex, "Intro Replacer: intro folder {Path} is not usable", target);
-            return BadRequest("That folder cannot be written to. Create it or pick another one.");
+            return BadRequest(L("error.folder.write"));
         }
 
         var config = Plugin.Configuration;
@@ -145,7 +148,7 @@ public class IntroReplacerController : ControllerBase
         catch (Exception ex)
         {
             _logger.LogError(ex, "Intro Replacer: failed to move intro files to {Path}", target);
-            return BadRequest("Could not move the existing intro files to that folder.");
+            return BadRequest(L("error.folder.move"));
         }
 
         try
@@ -155,7 +158,7 @@ public class IntroReplacerController : ControllerBase
         catch (Exception ex)
         {
             _logger.LogError(ex, "Intro Replacer: failed to use intro folder {Path}", target);
-            return BadRequest("That folder cannot be used.");
+            return BadRequest(L("error.folder.use"));
         }
 
         config.IntroFolder = IntroAssetStore.PathsEqual(target, Plugin.AssetStore.DefaultDirectory)
@@ -192,12 +195,12 @@ public class IntroReplacerController : ControllerBase
     {
         if (file is null || file.Length == 0)
         {
-            return BadRequest("No file provided.");
+            return BadRequest(L("error.upload.none"));
         }
 
         if (!IntroAssetStore.IsSupported(file.FileName))
         {
-            return BadRequest("Unsupported file type.");
+            return BadRequest(L("error.upload.type"));
         }
 
         await using var stream = file.OpenReadStream();
@@ -242,7 +245,7 @@ public class IntroReplacerController : ControllerBase
 
         if (item is not Video video || string.IsNullOrEmpty(video.Path))
         {
-            return BadRequest("The selected item is not a playable video file.");
+            return BadRequest(L("error.video.notPlayable"));
         }
 
         var existing = Plugin.Configuration.Assets.FirstOrDefault(a => a.LibraryItemId == itemId);
@@ -379,6 +382,23 @@ public class IntroReplacerController : ControllerBase
             .Select(u => new UserDto(u.Id, u.Username));
 
         return Ok(users);
+    }
+
+    /// <summary>
+    /// Returns the dashboard translation strings for a locale, for the config page
+    /// and any other client that wants to render the UI in the user's language.
+    /// </summary>
+    /// <param name="lang">Optional locale name; falls back to Accept-Language/English.</param>
+    /// <returns>The resolved culture and its strings.</returns>
+    [HttpGet("Localization")]
+    [ProducesResponseType(StatusCodes.Status200OK)]
+    public ActionResult<LocalizationDto> GetLocalization([FromQuery] string? lang)
+    {
+        var requested = string.IsNullOrWhiteSpace(lang)
+            ? Request.Headers.AcceptLanguage.ToString()
+            : lang;
+        var culture = PluginLocalization.ResolveCulture(requested);
+        return Ok(new LocalizationDto(culture, PluginLocalization.GetAll(culture)));
     }
 
     /// <summary>
@@ -533,6 +553,11 @@ public record VideoCandidateDto(Guid Id, string Label, string Type, string Libra
 /// <param name="Id">User id.</param>
 /// <param name="Name">Username.</param>
 public record UserDto(Guid Id, string Name);
+
+/// <summary>Localized dashboard strings.</summary>
+/// <param name="Culture">The culture code that was resolved.</param>
+/// <param name="Strings">Flat translation key/value pairs.</param>
+public record LocalizationDto(string Culture, IReadOnlyDictionary<string, string> Strings);
 
 /// <summary>A node in the series/season/episode/movie target tree.</summary>
 /// <param name="Id">Item id.</param>

@@ -25,6 +25,7 @@
   <ItemGroup>
     <None Remove="Configuration\config.html" />
     <EmbeddedResource Include="Configuration\config.html" />
+    <EmbeddedResource Include="Localization\*.json" />
   </ItemGroup>
 
 </Project>
