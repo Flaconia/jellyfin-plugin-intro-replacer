@@ -1,5 +1,9 @@
 # Intro Replacer (Jellyfin plugin)
 
+‼️ **NOTE: in order to get the "replacing intro" trick working, you need to set your Jellyfin user's Intro Segments global setting to Skip.
+Otherwise, the custom intro will only be prepended before the episode.**
+
+
 Plays a **custom intro** before an episode or movie, then lets the client skip the
 item's own intro — effectively replacing it. Works on any client that supports
 Jellyfin intros (the server-side `IIntroProvider` mechanism, same as the official
