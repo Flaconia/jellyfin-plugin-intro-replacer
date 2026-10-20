@@ -123,6 +123,7 @@ the Jellyfin locale (`it.json`, `de.json`, `pt-BR.json`, …). The files are emb
 the DLL, so **adding a language needs no code change**: copy `en.json`, translate the
 values (keep the keys and `{placeholders}` unchanged) and rebuild. The plugin resolves
 the admin's locale (`pt-BR` → `pt` → `en`) and falls back to English for missing keys.
+Italian (`it.json`) is included.
 
 The folder is shaped for [Weblate](https://weblate.org) as a monolingual *JSON file*
 component (base file `en.json`, mask `*/Localization/*.json`). See

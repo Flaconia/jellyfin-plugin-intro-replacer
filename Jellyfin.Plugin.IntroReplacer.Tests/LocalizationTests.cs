@@ -60,18 +60,65 @@ public class LocalizationTests
     }
 
     [Fact]
-    public void UnknownCulturesFallBackToEnglish()
+    public void CulturesResolveToAvailableFiles()
     {
         Assert.Equal("en", PluginLocalization.ResolveCulture(null));
-        Assert.Equal("en", PluginLocalization.ResolveCulture("it-IT"));
+        Assert.Equal("it", PluginLocalization.ResolveCulture("it-IT"));
+        Assert.Equal("it", PluginLocalization.ResolveCulture("it-CH, it;q=0.9"));
         Assert.Equal("en", PluginLocalization.ResolveCulture("en-GB, en;q=0.9"));
+        Assert.Equal("en", PluginLocalization.ResolveCulture("xx-YY"));
     }
 
-    private static Dictionary<string, string> English()
+    [Fact]
+    public void ItalianStringsLoad()
+    {
+        Assert.Equal("Impostazioni", PluginLocalization.Get("settings.title", "it-IT"));
+        Assert.Equal("Riproduci le intro solo per i film",
+            PluginLocalization.Get("settings.moviesOnly", "it"));
+    }
+
+    [Fact]
+    public void EveryTranslationMatchesTheSourceKeysAndPlaceholders()
+    {
+        var source = English();
+        var cultures = PluginAssembly.GetManifestResourceNames()
+            .Where(n => n.StartsWith("Jellyfin.Plugin.IntroReplacer.Localization.", StringComparison.Ordinal)
+                && n.EndsWith(".json", StringComparison.OrdinalIgnoreCase))
+            .Select(n => n["Jellyfin.Plugin.IntroReplacer.Localization.".Length..^".json".Length])
+            .Where(c => c != "en")
+            .ToList();
+
+        Assert.NotEmpty(cultures);
+
+        foreach (var culture in cultures)
+        {
+            var values = Load(culture);
+            Assert.Equal(
+                source.Keys.OrderBy(k => k, StringComparer.Ordinal),
+                values.Keys.OrderBy(k => k, StringComparer.Ordinal));
+
+            foreach (var key in source.Keys)
+            {
+                Assert.False(string.IsNullOrWhiteSpace(values[key]), $"{culture}: empty value for {key}");
+                Assert.Equal(Placeholders(source[key]), Placeholders(values[key]));
+            }
+        }
+    }
+
+    private static string[] Placeholders(string text)
+        => Regex.Matches(text, @"\{[^}]+\}")
+            .Select(m => m.Value)
+            .Distinct()
+            .OrderBy(v => v, StringComparer.Ordinal)
+            .ToArray();
+
+    private static Dictionary<string, string> English() => Load("en");
+
+    private static Dictionary<string, string> Load(string culture)
     {
         using var stream = PluginAssembly.GetManifestResourceStream(
-            "Jellyfin.Plugin.IntroReplacer.Localization.en.json")
-            ?? throw new InvalidOperationException("English localization resource not found.");
+            $"Jellyfin.Plugin.IntroReplacer.Localization.{culture}.json")
+            ?? throw new InvalidOperationException($"Localization resource '{culture}' not found.");
         using var reader = new StreamReader(stream);
         return JsonSerializer.Deserialize<Dictionary<string, string>>(reader.ReadToEnd())
             ?? new Dictionary<string, string>();

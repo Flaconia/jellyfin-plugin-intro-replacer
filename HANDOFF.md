@@ -421,16 +421,17 @@ Tests are now 32 (`IntroSessionTrackerTests` adds 9).
    `BadRequest` messages now go through `L(key)` using `Accept-Language`.
    `Localization/README.md` documents the Weblate component (JSON file, base `en.json`,
    mask `*/Localization/*.json`). Adding a language is dropping in `<code>.json` — no code
-   change. New `LocalizationTests` (4 tests): English loads, every `t/tf/tn`,
-   `countPart` and `data-i18n*` key in config.html exists, plural pairs are complete,
-   unknown cultures fall back to `en`.
-5. **Verification.** `dotnet build` clean, `dotnet test` **42/42**, jsdom smoke updated
+   change. `it.json` ships as the first translation. New `LocalizationTests` (6 tests):
+   English loads, every `t/tf/tn`, `countPart` and `data-i18n*` key in config.html exists,
+   plural pairs are complete, culture resolution, Italian loads, and every translation
+   has the same keys/placeholders as the source.
+5. **Verification.** `dotnet build` clean, `dotnet test` **44/44**, jsdom smoke updated
    for the trash buttons, the out-of-frame radios and Move down (passes). Deployed to the
    10.10.7 container: `GET /IntroReplacer/Localization?lang=en-US` returns
-   `{"Culture":"en","Strings":{…}}`, an `Accept-Language: it-IT` request (no `it.json`
-   yet) correctly falls back to `en`, the served page contains the `data-i18n`
-   attributes, and `/IntroReplacer/Test` + `/Items/{id}/Intros` still return the Pokémon
-   rule/intro for the verified episode.
+   `{"Culture":"en","Strings":{…}}`, `?lang=it-IT` returns the Italian dictionary
+   (`"settings.title":"Impostazioni"`), an unknown locale falls back to `en`, the served
+   page contains the `data-i18n` attributes, and `/IntroReplacer/Test` +
+   `/Items/{id}/Intros` still return the Pokémon rule/intro for the verified episode.
 
 ## 4. Automatic intro detection — status
 
