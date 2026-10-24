@@ -1,0 +1,53 @@
+name: Build
+
+on:
+  push:
+    branches:
+      - main
+    paths-ignore:
+      - '**/*.md'
+      - 'manifest.json'
+  pull_request:
+    paths-ignore:
+      - '**/*.md'
+      - 'manifest.json'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: build-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      # The plugin targets net8.0. The SDK also provides the ASP.NET Core 8
+      # shared framework the test host needs (Jellyfin.Controller pulls it in).
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+
+      # IntroReplacer.slnx needs SDK 9+, so CI builds the projects directly.
+      - name: Build
+        run: dotnet build Jellyfin.Plugin.IntroReplacer/Jellyfin.Plugin.IntroReplacer.csproj -c Release
+
+      - name: Test
+        run: dotnet test Jellyfin.Plugin.IntroReplacer.Tests/Jellyfin.Plugin.IntroReplacer.Tests.csproj -c Release
+
+      - name: Publish
+        run: dotnet publish Jellyfin.Plugin.IntroReplacer/Jellyfin.Plugin.IntroReplacer.csproj -c Release -o artifacts/publish
+
+      - name: Upload plugin DLL
+        uses: actions/upload-artifact@v4
+        with:
+          name: Jellyfin.Plugin.IntroReplacer
+          path: artifacts/publish/Jellyfin.Plugin.IntroReplacer.dll
+          if-no-files-found: error
+          retention-days: 14

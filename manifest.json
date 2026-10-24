@@ -2,8 +2,8 @@
     {
         "guid": "07e08043-224d-4228-964f-02242635344f",
         "name": "Intro Replacer",
-        "description": "Play a custom intro before episodes and movies, replacing the original.",
-        "overview": "Custom per-item intro replacer",
+        "description": "Plays a per-item custom intro (a local video you provide) before an episode or movie, then lets the client skip the item's own intro.",
+        "overview": "Play a custom intro before episodes and movies, replacing the original.",
         "owner": "flaconia",
         "category": "MoviesAndShows",
         "imageUrl": "",
@@ -12,9 +12,9 @@
                 "version": "1.0.0.0",
                 "changelog": "Initial release.",
                 "targetAbi": "10.10.0.0",
-                "sourceUrl": "",
+                "sourceUrl": "https://github.com/Flaconia/jellyfin-plugin-intro-replacer/releases/download/v1.0.0.0/Jellyfin.Plugin.IntroReplacer_1.0.0.0.zip",
                 "checksum": "",
-                "timestamp": "2026-01-01T00:00:00Z"
+                "timestamp": "2026-10-24T00:00:00Z"
             }
         ]
     }

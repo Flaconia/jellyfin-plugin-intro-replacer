@@ -1,0 +1,188 @@
+name: Release
+
+# Push a tag like `v1.0.0.0` (or run this workflow manually) to:
+#   1. build + test + publish the plugin,
+#   2. create the GitHub release with Jellyfin.Plugin.IntroReplacer_<version>.zip,
+#   3. rewrite manifest.json with that asset URL and its MD5 checksum,
+#   4. commit manifest.json back to the default branch.
+#
+# Jellyfin downloads `sourceUrl` and rejects the install unless the file's MD5
+# matches `checksum`, so never hand-edit those two fields.
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version to publish, without the leading "v" (must match Directory.Build.props and build.yaml)'
+        required: true
+        type: string
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+env:
+  PLUGIN_DLL: Jellyfin.Plugin.IntroReplacer.dll
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+
+      - name: Resolve and validate version
+        id: version
+        run: |
+          set -euo pipefail
+
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            version="${{ inputs.version }}"
+          else
+            version="${GITHUB_REF_NAME#v}"
+          fi
+
+          props_version="$(sed -n 's:.*<Version>\([^<]*\)</Version>.*:\1:p' Directory.Build.props | head -n1)"
+          yaml_version="$(sed -n 's/^version: *"\?\([^"[:space:]]*\)"\? *$/\1/p' build.yaml | head -n1)"
+          target_abi="$(sed -n 's/^targetAbi: *"\?\([^"[:space:]]*\)"\? *$/\1/p' build.yaml | head -n1)"
+
+          if [ -z "$version" ] || [ -z "$props_version" ] || [ -z "$yaml_version" ]; then
+            echo "::error::Could not resolve version (tag/input '$version', props '$props_version', build.yaml '$yaml_version')"
+            exit 1
+          fi
+          if [ "$version" != "$props_version" ] || [ "$version" != "$yaml_version" ]; then
+            echo "::error::Version mismatch: tag/input '$version', Directory.Build.props '$props_version', build.yaml '$yaml_version'"
+            exit 1
+          fi
+
+          # build.yaml uses a folded block scalar; take its first non-empty line.
+          changelog="$(awk '
+            /^changelog: *[>|]/ { getline; sub(/^[[:space:]]+/, ""); print; exit }
+            /^changelog:/ { sub(/^changelog:[[:space:]]*/, ""); print; exit }
+          ' build.yaml | tr -d '"')"
+          if [ -z "$changelog" ]; then changelog="Intro Replacer $version"; fi
+
+          {
+            echo "version=$version"
+            echo "tag=v$version"
+            echo "target_abi=$target_abi"
+            echo "changelog=$changelog"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Test
+        run: dotnet test Jellyfin.Plugin.IntroReplacer.Tests/Jellyfin.Plugin.IntroReplacer.Tests.csproj -c Release
+
+      - name: Publish
+        run: dotnet publish Jellyfin.Plugin.IntroReplacer/Jellyfin.Plugin.IntroReplacer.csproj -c Release -o artifacts/publish
+
+      # Jellyfin extracts the zip into the plugin directory and loads the DLL from
+      # the archive root, so the DLL is stored flat.
+      - name: Package
+        id: package
+        run: |
+          set -euo pipefail
+          version='${{ steps.version.outputs.version }}'
+          zip_name="Jellyfin.Plugin.IntroReplacer_${version}.zip"
+
+          (cd artifacts/publish && zip -q -X "../${zip_name}" "${PLUGIN_DLL}")
+          checksum="$(md5sum "artifacts/${zip_name}" | cut -d' ' -f1)"
+
+          {
+            echo "zip=artifacts/${zip_name}"
+            echo "name=${zip_name}"
+            echo "checksum=${checksum}"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Create or update GitHub release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ steps.version.outputs.tag }}
+          VERSION: ${{ steps.version.outputs.version }}
+          ZIP: ${{ steps.package.outputs.zip }}
+          CHANGELOG: ${{ steps.version.outputs.changelog }}
+        run: |
+          set -euo pipefail
+
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            gh release upload "$TAG" "$ZIP" --clobber
+          else
+            gh release create "$TAG" "$ZIP" \
+              --title "Intro Replacer $VERSION" \
+              --notes "$CHANGELOG" \
+              --latest
+          fi
+
+      - name: Update manifest.json on the default branch
+        env:
+          DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
+          REPOSITORY: ${{ github.repository }}
+          VERSION: ${{ steps.version.outputs.version }}
+          TAG: ${{ steps.version.outputs.tag }}
+          TARGET_ABI: ${{ steps.version.outputs.target_abi }}
+          CHANGELOG: ${{ steps.version.outputs.changelog }}
+          CHECKSUM: ${{ steps.package.outputs.checksum }}
+          ZIP_NAME: ${{ steps.package.outputs.name }}
+        run: |
+          set -euo pipefail
+
+          git fetch origin "$DEFAULT_BRANCH"
+          git checkout -B "$DEFAULT_BRANCH" "origin/$DEFAULT_BRANCH"
+
+          python3 - <<'PY'
+          import json, os, sys
+          from datetime import datetime, timezone
+
+          path = "manifest.json"
+          with open(path, encoding="utf-8") as handle:
+              packages = json.load(handle)
+
+          repository = os.environ["REPOSITORY"]
+          version = os.environ["VERSION"]
+          entry = {
+              "version": version,
+              "changelog": os.environ["CHANGELOG"],
+              "targetAbi": os.environ["TARGET_ABI"],
+              "sourceUrl": (
+                  f"https://github.com/{repository}/releases/download/"
+                  f"{os.environ['TAG']}/{os.environ['ZIP_NAME']}"
+              ),
+              "checksum": os.environ["CHECKSUM"],
+              "timestamp": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
+          }
+
+          for package in packages:
+              versions = [v for v in package.get("versions", []) if v.get("version") != version]
+              versions.insert(0, entry)
+              package["versions"] = versions
+              break
+          else:
+              sys.exit("manifest.json does not contain any package entry")
+
+          with open(path, "w", encoding="utf-8") as handle:
+              json.dump(packages, handle, indent=4, ensure_ascii=False)
+              handle.write("\n")
+          PY
+
+          if git diff --quiet -- manifest.json; then
+            echo "manifest.json already up to date"
+            exit 0
+          fi
+
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add manifest.json
+          git commit -m "chore(manifest): publish ${VERSION}"
+          git push origin "HEAD:${DEFAULT_BRANCH}"

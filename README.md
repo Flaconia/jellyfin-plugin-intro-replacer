@@ -1,5 +1,7 @@
 # Intro Replacer (Jellyfin plugin)
 
+‼️ **NOTE: I've coded this using DeepSeek mainly for personal use (as you can probably tell from this README). Feel free to use this plugin if you want or even propose improvements, but don't expect maximum efficiency or code cleanliness.**
+
 ‼️ **NOTE: in order to get the "replacing intro" trick working, you need to set your Jellyfin user's Intro Segments global setting to Skip.
 Otherwise, the custom intro will only be prepended before the episode.**
 
@@ -35,7 +37,7 @@ Local Intros plugin).
   videos) as an intro — nothing is copied or modified. Deleting such an intro only
   removes it from the plugin's list, never the media file.
 - For **Replace**, if the item has no `Intro` media segment yet, one is derived from
-  its chapters (e.g. a "Opening"/"Sigla d'apertura" chapter) so clients offer to
+  its chapters (e.g. a "Opening"/"Intro" chapter) so clients offer to
   skip the original intro. Existing segments (e.g. from Intro Skipper) are kept.
   Automatic audio-based detection is **not** implemented — install Intro Skipper for
   items without chapters.
@@ -84,10 +86,40 @@ files there. For the default folder, fix ownership once with:
 sudo chown -R 1000:1000 <jellyfin config>/plugins/configurations/IntroReplacer
 ```
 
-## Install (release)
+## Install (plugin catalog)
 
-1. Dashboard → Plugins → Repositories → add this repo's `manifest.json` URL.
-2. Catalog → install **Intro Replacer**, then restart Jellyfin.
+1. Dashboard → Plugins → Repositories → **+** and add this URL:
+
+   ```
+   https://raw.githubusercontent.com/Flaconia/jellyfin-plugin-intro-replacer/main/manifest.json
+   ```
+
+   It must be the **raw** URL. A `github.com/.../blob/...` URL returns HTML, which
+   Jellyfin cannot parse, and the catalog then stays empty.
+2. Plugins → Catalog → **Intro Replacer** → Install, then restart Jellyfin.
+
+The catalog entry comes from [`manifest.json`](manifest.json). Releases are built by
+[`.github/workflows/release.yaml`](.github/workflows/release.yaml): pushing a tag such as
+`v1.0.0.0` publishes `Jellyfin.Plugin.IntroReplacer_<version>.zip` and rewrites the
+manifest's `sourceUrl` and `checksum`. Jellyfin verifies the downloaded zip's **MD5**
+against that checksum, so a stale checksum makes the install fail.
+
+Verify the manifest (locally, or against the published URL) with:
+
+```bash
+bash scripts/check-manifest.sh
+bash scripts/check-manifest.sh https://raw.githubusercontent.com/Flaconia/jellyfin-plugin-intro-replacer/main/manifest.json
+```
+
+### If the plugin does not appear in the catalog
+
+- The repository must be **public**: Jellyfin fetches the manifest without
+  authentication, so a private repo always results in an empty catalog.
+- `curl -sI <raw manifest URL>` must return `200`, and `curl -s <raw manifest URL>` must
+  start with `[`. Otherwise Jellyfin logs
+  `An error occurred while accessing the plugin manifest` and lists nothing.
+- The manifest needs at least one version whose `targetAbi` is not newer than the
+  server (this plugin: `10.10.0.0`, for Jellyfin 10.10.x).
 
 ## Build from source
 

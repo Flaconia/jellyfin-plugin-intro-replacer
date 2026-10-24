@@ -4,6 +4,8 @@ obj/
 .idea/
 artifacts/
 *.user
+AGENTS.md
+HANDOFF.md
 
 # Local Docker test environment state (generated at runtime)
 docker/jellyfin/config/
