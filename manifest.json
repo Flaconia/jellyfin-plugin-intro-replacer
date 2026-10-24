@@ -12,9 +12,9 @@
                 "version": "1.0",
                 "changelog": "Initial release.",
                 "targetAbi": "10.10.0.0",
-                "sourceUrl": "https://github.com/Flaconia/jellyfin-plugin-intro-replacer/releases/download/v1.0.0.0/Jellyfin.Plugin.IntroReplacer_1.0.0.0.zip",
-                "checksum": "",
-                "timestamp": "2026-10-24T00:00:00Z"
+                "sourceUrl": "https://github.com/Flaconia/jellyfin-plugin-intro-replacer/releases/download/v1.0/Jellyfin.Plugin.IntroReplacer_1.0.zip",
+                "checksum": "2a9d96939001ec9190a290615bc958f7",
+                "timestamp": "2026-10-24T09:09:42Z"
             }
         ]
     }
