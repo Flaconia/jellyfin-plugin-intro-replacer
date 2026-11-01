@@ -11,7 +11,8 @@ item's own intro — effectively replacing it. Works on any client that supports
 Jellyfin intros (the server-side `IIntroProvider` mechanism, same as the official
 Local Intros plugin).
 
-> Target: **Jellyfin 10.10.x** (.NET 8).
+> Target: **Jellyfin 12.4.x** (.NET 10). Older servers are not supported — keep
+> Jellyfin updated to use this plugin.
 
 ## How it works
 
@@ -45,7 +46,7 @@ Local Intros plugin).
   **Skip Intro button** (for ~8 s) while the segment plays; it never seeks by itself.
   For hands-free skipping, each client sets
   `Playback → Media Segment Actions → Intro Segments → Skip` (a per-client/browser
-  preference — Jellyfin 10.10 has no server-side equivalent).
+  preference — Jellyfin has no server-side equivalent).
 
 There is **no** per-item "3-dots" menu: Jellyfin has no cross-client plugin API for
 that. Assignment happens on the plugin's dashboard page (`Dashboard → Plugins → Intro Replacer`),
@@ -100,7 +101,7 @@ sudo chown -R 1000:1000 <jellyfin config>/plugins/configurations/IntroReplacer
 
 The catalog entry comes from [`manifest.json`](manifest.json). Releases are built by
 [`.github/workflows/release.yaml`](.github/workflows/release.yaml): pushing a tag such as
-`v1.0.0.0` publishes `Jellyfin.Plugin.IntroReplacer_<version>.zip` and rewrites the
+`v2.0` publishes `Jellyfin.Plugin.IntroReplacer_<version>.zip` and rewrites the
 manifest's `sourceUrl` and `checksum`. Jellyfin verifies the downloaded zip's **MD5**
 against that checksum, so a stale checksum makes the install fail.
 
@@ -119,11 +120,12 @@ bash scripts/check-manifest.sh https://raw.githubusercontent.com/Flaconia/jellyf
   start with `[`. Otherwise Jellyfin logs
   `An error occurred while accessing the plugin manifest` and lists nothing.
 - The manifest needs at least one version whose `targetAbi` is not newer than the
-  server (this plugin: `10.10.0.0`, for Jellyfin 10.10.x).
+  server (current releases: `12.4.0.0`, for Jellyfin 12.4.x). The older `1.0` entry
+  targets `10.10.0.0` and will not load on 12.4.
 
 ## Build from source
 
-Requires the .NET 8 SDK (to build `net8.0`) and, for tests, the ASP.NET Core 8 runtime.
+Requires the .NET 10 SDK (to build `net10.0`) and, for tests, the ASP.NET Core 10 runtime.
 
 ```bash
 dotnet build IntroReplacer.slnx

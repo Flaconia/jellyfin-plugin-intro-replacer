@@ -1,10 +1,12 @@
 using System.Linq;
 using System.Threading.Tasks;
-using Jellyfin.Data.Enums;
+using Jellyfin.Database.Implementations.Enums;
 using Jellyfin.Plugin.IntroReplacer.Configuration;
 using MediaBrowser.Controller;
+using MediaBrowser.Controller.Chapters;
 using MediaBrowser.Controller.Entities;
-using MediaBrowser.Controller.Persistence;
+using MediaBrowser.Controller.Library;
+using MediaBrowser.Controller.MediaSegments;
 using Microsoft.Extensions.Logging;
 
 namespace Jellyfin.Plugin.IntroReplacer.Services;
@@ -26,26 +28,28 @@ public static class IntroSegmentHelper
     /// </list>
     /// </summary>
     /// <param name="segmentManager">The media segment manager.</param>
-    /// <param name="itemRepository">Item repository (chapter access).</param>
+    /// <param name="chapterManager">Chapter manager (chapter access).</param>
+    /// <param name="libraryManager">Library manager, used to resolve the item's library options.</param>
     /// <param name="item">The item.</param>
     /// <param name="placement">The rule's placement mode.</param>
     /// <param name="logger">Logger.</param>
     /// <returns>A task.</returns>
     public static async Task ApplyPlacementAsync(
         IMediaSegmentManager segmentManager,
-        IItemRepository itemRepository,
+        IChapterManager chapterManager,
+        ILibraryManager libraryManager,
         BaseItem item,
         IntroPlacement placement,
         ILogger logger)
     {
         if (placement == IntroPlacement.Prepend)
         {
-            await RemoveIntroSegmentsAsync(segmentManager, item, logger).ConfigureAwait(false);
+            await RemoveIntroSegmentsAsync(segmentManager, libraryManager, item, logger).ConfigureAwait(false);
             return;
         }
 
         var existing = await segmentManager
-            .GetSegmentsAsync(item, new[] { MediaSegmentType.Intro }, filterByProvider: false)
+            .GetSegmentsAsync(item, new[] { MediaSegmentType.Intro }, libraryManager.GetLibraryOptions(item), filterByProvider: false)
             .ConfigureAwait(false);
 
         if (existing.Any())
@@ -53,7 +57,7 @@ public static class IntroSegmentHelper
             return;
         }
 
-        var segment = IntroSegmentProvider.BuildSegment(item, itemRepository);
+        var segment = IntroSegmentProvider.BuildSegment(item, chapterManager);
         if (segment is null)
         {
             logger.LogInformation(
@@ -78,16 +82,18 @@ public static class IntroSegmentHelper
     /// the very beginning (used when a rule opts out of replacing the original intro).
     /// </summary>
     /// <param name="segmentManager">The media segment manager.</param>
+    /// <param name="libraryManager">Library manager, used to resolve the item's library options.</param>
     /// <param name="item">The item.</param>
     /// <param name="logger">Logger.</param>
     /// <returns>A task.</returns>
     public static async Task RemoveIntroSegmentsAsync(
         IMediaSegmentManager segmentManager,
+        ILibraryManager libraryManager,
         BaseItem item,
         ILogger logger)
     {
         var segments = await segmentManager
-            .GetSegmentsAsync(item, new[] { MediaSegmentType.Intro }, filterByProvider: false)
+            .GetSegmentsAsync(item, new[] { MediaSegmentType.Intro }, libraryManager.GetLibraryOptions(item), filterByProvider: false)
             .ConfigureAwait(false);
 
         foreach (var segment in segments)

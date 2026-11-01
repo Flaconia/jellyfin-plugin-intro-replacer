@@ -4,7 +4,9 @@ using System.IO;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
+using Jellyfin.Data;
 using Jellyfin.Data.Enums;
+using Jellyfin.Database.Implementations.Enums;
 using MediaBrowser.Controller.Entities;
 using MediaBrowser.Controller.Library;
 using MediaBrowser.Model.Configuration;
@@ -260,7 +262,7 @@ public sealed class IntroLibraryManager
             return;
         }
 
-        foreach (var user in _userManager.Users)
+        foreach (var user in _userManager.GetUsers())
         {
             try
             {

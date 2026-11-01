@@ -2,7 +2,7 @@ name: introreplacer
 
 services:
   jellyfin:
-    image: jellyfin/jellyfin:10.10.7
+    image: jellyfin/jellyfin:12.4
     container_name: introreplacer-jellyfin
     restart: unless-stopped
     ports:

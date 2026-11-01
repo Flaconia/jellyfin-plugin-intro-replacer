@@ -3,7 +3,7 @@
 #   * no empty sourceUrl/checksum,
 #   * each sourceUrl downloads,
 #   * the downloaded file's MD5 matches the recorded checksum,
-#   * the recorded targetAbi is not newer than the plugin's supported server.
+#   * the recorded targetAbi is a supported series (12.4, or legacy 10.10).
 #
 # Usage:
 #   bash scripts/check-manifest.sh                       # local manifest.json
@@ -11,7 +11,9 @@
 set -euo pipefail
 
 MANIFEST_URL="${1:-manifest.json}"
-TARGET_ABI_EXPECTED="10.10."
+# Current release series plus the legacy 1.0 entry kept for Jellyfin 10.10 installs.
+TARGET_ABI_EXPECTED="12.4."
+TARGET_ABI_LEGACY="10.10."
 TMP_DIR="$(mktemp -d)"
 trap 'rm -rf "$TMP_DIR"' EXIT
 
@@ -61,8 +63,8 @@ while IFS=$'\t' read -r version target_abi source_url checksum; do
         continue
     fi
     case "$target_abi" in
-        "$TARGET_ABI_EXPECTED"*) ;;
-        *) echo "WARN: targetAbi $target_abi does not look like $TARGET_ABI_EXPECTED" >&2 ;;
+        "$TARGET_ABI_EXPECTED"*|"$TARGET_ABI_LEGACY"*) ;;
+        *) echo "WARN: targetAbi $target_abi does not look like $TARGET_ABI_EXPECTED or $TARGET_ABI_LEGACY" >&2 ;;
     esac
 
     zip_file="$TMP_DIR/$version.zip"

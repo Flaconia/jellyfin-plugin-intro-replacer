@@ -3,12 +3,13 @@ using System.Collections.Generic;
 using System.Globalization;
 using System.Threading;
 using System.Threading.Tasks;
-using Jellyfin.Data.Enums;
+using Jellyfin.Database.Implementations.Enums;
 using MediaBrowser.Common.Extensions;
 using MediaBrowser.Controller;
+using MediaBrowser.Controller.Chapters;
 using MediaBrowser.Controller.Entities;
 using MediaBrowser.Controller.Library;
-using MediaBrowser.Controller.Persistence;
+using MediaBrowser.Controller.MediaSegments;
 using MediaBrowser.Model;
 using MediaBrowser.Model.MediaSegments;
 using Microsoft.Extensions.Logging;
@@ -37,22 +38,22 @@ public sealed class IntroSegmentProvider : IMediaSegmentProvider
         ProviderName.ToLowerInvariant().GetMD5().ToString("N", CultureInfo.InvariantCulture);
 
     private readonly ILibraryManager _libraryManager;
-    private readonly IItemRepository _itemRepository;
+    private readonly IChapterManager _chapterManager;
     private readonly ILogger<IntroSegmentProvider> _logger;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="IntroSegmentProvider"/> class.
     /// </summary>
     /// <param name="libraryManager">Library manager.</param>
-    /// <param name="itemRepository">Item repository (chapter access).</param>
+    /// <param name="chapterManager">Chapter manager (chapter access).</param>
     /// <param name="loggerFactory">Logger factory.</param>
     public IntroSegmentProvider(
         ILibraryManager libraryManager,
-        IItemRepository itemRepository,
+        IChapterManager chapterManager,
         ILoggerFactory loggerFactory)
     {
         _libraryManager = libraryManager;
-        _itemRepository = itemRepository;
+        _chapterManager = chapterManager;
         _logger = loggerFactory.CreateLogger<IntroSegmentProvider>();
     }
 
@@ -75,7 +76,7 @@ public sealed class IntroSegmentProvider : IMediaSegmentProvider
             return Task.FromResult(empty);
         }
 
-        var segment = BuildSegment(item, _itemRepository);
+        var segment = BuildSegment(item, _chapterManager);
         if (segment is null)
         {
             return Task.FromResult(empty);
@@ -85,15 +86,18 @@ public sealed class IntroSegmentProvider : IMediaSegmentProvider
         return Task.FromResult<IReadOnlyList<MediaSegmentDto>>(new[] { segment });
     }
 
+    /// <inheritdoc />
+    public Task CleanupExtractedData(Guid itemId, CancellationToken cancellationToken) => Task.CompletedTask;
+
     /// <summary>
     /// Builds an Intro segment for an item from its chapters, or <c>null</c>.
     /// </summary>
     /// <param name="item">The item.</param>
-    /// <param name="itemRepository">Item repository (chapter access).</param>
+    /// <param name="chapterManager">Chapter manager (chapter access).</param>
     /// <returns>The segment, or <c>null</c>.</returns>
-    public static MediaSegmentDto? BuildSegment(BaseItem item, IItemRepository itemRepository)
+    public static MediaSegmentDto? BuildSegment(BaseItem item, IChapterManager chapterManager)
     {
-        var range = IntroChapterDetector.Detect(itemRepository.GetChapters(item));
+        var range = IntroChapterDetector.Detect(chapterManager.GetChapters(item.Id));
         if (range is null)
         {
             return null;

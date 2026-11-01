@@ -27,12 +27,12 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      # The plugin targets net8.0. The SDK also provides the ASP.NET Core 8
-      # shared framework the test host needs (Jellyfin.Controller pulls it in).
+      # The plugin targets net10.0 (Jellyfin 12.4). The SDK also provides the
+      # ASP.NET Core 10 shared framework the test host needs.
       - name: Setup .NET
         uses: actions/setup-dotnet@v4
         with:
-          dotnet-version: '8.0.x'
+          dotnet-version: '10.0.x'
 
       # IntroReplacer.slnx needs SDK 9+, so CI builds the projects directly.
       - name: Build

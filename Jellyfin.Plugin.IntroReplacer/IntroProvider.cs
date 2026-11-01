@@ -2,14 +2,15 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
-using Jellyfin.Data.Entities;
 using Jellyfin.Data.Enums;
+using Jellyfin.Database.Implementations.Entities;
 using Jellyfin.Plugin.IntroReplacer.Configuration;
 using Jellyfin.Plugin.IntroReplacer.Services;
 using MediaBrowser.Controller;
+using MediaBrowser.Controller.Chapters;
 using MediaBrowser.Controller.Entities;
 using MediaBrowser.Controller.Library;
-using MediaBrowser.Controller.Persistence;
+using MediaBrowser.Controller.MediaSegments;
 using MediaBrowser.Controller.Session;
 using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.Logging;
@@ -26,7 +27,7 @@ public class IntroProvider : IIntroProvider
     private readonly ILogger<IntroProvider> _logger;
     private readonly IMediaSegmentManager _segmentManager;
     private readonly ILibraryManager _libraryManager;
-    private readonly IItemRepository _itemRepository;
+    private readonly IChapterManager _chapterManager;
     private readonly IHttpContextAccessor _httpContextAccessor;
     private readonly ISessionManager _sessionManager;
     private readonly Random _random = new();
@@ -37,21 +38,21 @@ public class IntroProvider : IIntroProvider
     /// <param name="loggerFactory">Logger factory.</param>
     /// <param name="mediaSegmentManager">Media segment manager.</param>
     /// <param name="libraryManager">Library manager.</param>
-    /// <param name="itemRepository">Item repository (chapter access).</param>
+    /// <param name="chapterManager">Chapter manager (chapter access).</param>
     /// <param name="httpContextAccessor">Accessor for the current request.</param>
     /// <param name="sessionManager">Session manager, used by the session frequency.</param>
     public IntroProvider(
         ILoggerFactory loggerFactory,
         IMediaSegmentManager mediaSegmentManager,
         ILibraryManager libraryManager,
-        IItemRepository itemRepository,
+        IChapterManager chapterManager,
         IHttpContextAccessor httpContextAccessor,
         ISessionManager sessionManager)
     {
         _logger = loggerFactory.CreateLogger<IntroProvider>();
         _segmentManager = mediaSegmentManager;
         _libraryManager = libraryManager;
-        _itemRepository = itemRepository;
+        _chapterManager = chapterManager;
         _httpContextAccessor = httpContextAccessor;
         _sessionManager = sessionManager;
     }
@@ -165,7 +166,7 @@ public class IntroProvider : IIntroProvider
                 selection.Frequency);
 
             await IntroSegmentHelper
-                .ApplyPlacementAsync(_segmentManager, _itemRepository, item, selection.Placement, _logger)
+                .ApplyPlacementAsync(_segmentManager, _chapterManager, _libraryManager, item, selection.Placement, _logger)
                 .ConfigureAwait(false);
 
             return intros;

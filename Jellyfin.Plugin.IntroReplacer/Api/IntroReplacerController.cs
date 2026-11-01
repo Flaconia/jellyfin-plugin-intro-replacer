@@ -377,7 +377,7 @@ public class IntroReplacerController : ControllerBase
     [ProducesResponseType(StatusCodes.Status200OK)]
     public ActionResult<IEnumerable<UserDto>> GetUsers()
     {
-        var users = _userManager.Users
+        var users = _userManager.GetUsers()
             .OrderBy(u => u.Username, StringComparer.OrdinalIgnoreCase)
             .Select(u => new UserDto(u.Id, u.Username));
 
@@ -410,7 +410,7 @@ public class IntroReplacerController : ControllerBase
     [ProducesResponseType(StatusCodes.Status200OK)]
     public ActionResult<IEnumerable<TargetNodeDto>> GetTargets()
     {
-        var user = _userManager.Users.FirstOrDefault();
+        var user = _userManager.GetUsers().FirstOrDefault();
 
         // Never offer the plugin's own hidden intro library (its intro clips show up
         // as movies) as something to target.
@@ -452,11 +452,11 @@ public class IntroReplacerController : ControllerBase
                     var seasons = new List<TargetNodeDto>();
                     if (user is not null)
                     {
-                        foreach (var season in series.GetChildren(user, true)
+                        foreach (var season in series.GetChildren(user, true, out _)
                                      .OfType<Season>()
                                      .OrderBy(s => s.IndexNumber ?? 0))
                         {
-                            var episodes = season.GetChildren(user, true)
+                            var episodes = season.GetChildren(user, true, out _)
                                 .OfType<Episode>()
                                 .OrderBy(e => e.IndexNumber ?? 0)
                                 .Select(e => Node(e, "Episode", e.IndexNumber, Array.Empty<TargetNodeDto>()))

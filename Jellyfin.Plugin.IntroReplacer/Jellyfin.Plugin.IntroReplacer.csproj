@@ -1,8 +1,8 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
-    <!-- Jellyfin 10.10.x runs on .NET 8. This TFM must match the server version. -->
-    <TargetFramework>net8.0</TargetFramework>
+    <!-- Jellyfin 12.4.x runs on .NET 10. This TFM must match the server version. -->
+    <TargetFramework>net10.0</TargetFramework>
     <RootNamespace>Jellyfin.Plugin.IntroReplacer</RootNamespace>
     <AssemblyName>Jellyfin.Plugin.IntroReplacer</AssemblyName>
     <Nullable>enable</Nullable>
@@ -14,10 +14,10 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <PackageReference Include="Jellyfin.Controller" Version="10.10.7">
+    <PackageReference Include="Jellyfin.Controller" Version="12.4.0">
       <ExcludeAssets>runtime</ExcludeAssets>
     </PackageReference>
-    <PackageReference Include="Jellyfin.Model" Version="10.10.7">
+    <PackageReference Include="Jellyfin.Model" Version="12.4.0">
       <ExcludeAssets>runtime</ExcludeAssets>
     </PackageReference>
   </ItemGroup>
