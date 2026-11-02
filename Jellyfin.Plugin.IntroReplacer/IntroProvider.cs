@@ -86,7 +86,9 @@ public class IntroProvider : IIntroProvider
 
             // A path-only intro is silently dropped by Jellyfin unless the file is a
             // scanned library item. Make sure the hidden library exists before
-            // resolving uploaded files (library-picked intros are already items).
+            // resolving uploaded files (library-picked intros are already items, and
+            // so are files inside a folder that is already one of the admin's
+            // libraries, where no hidden library is created).
             var intros = new List<IntroInfo>();
             var libraryEnsured = false;
             foreach (var assetId in selection.AssetIds)
@@ -127,10 +129,7 @@ public class IntroProvider : IIntroProvider
                 if (!libraryEnsured)
                 {
                     libraryEnsured = true;
-                    if (!plugin.IntroLibrary.Exists())
-                    {
-                        await plugin.IntroLibrary.EnsureAsync().ConfigureAwait(false);
-                    }
+                    await plugin.IntroLibrary.EnsureNeededAsync().ConfigureAwait(false);
                 }
 
                 var libraryItem = plugin.IntroLibrary.FindItem(path);
@@ -141,7 +140,7 @@ public class IntroProvider : IIntroProvider
                 else
                 {
                     _logger.LogWarning(
-                        "Intro asset {AssetName} is not a Jellyfin library item yet; waiting for the hidden intro library scan",
+                        "Intro asset {AssetName} is not a Jellyfin library item yet; waiting for the library scan",
                         asset.Name);
                     intros.Add(new IntroInfo { Path = path });
                 }

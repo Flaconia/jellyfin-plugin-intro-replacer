@@ -29,6 +29,12 @@ namespace Jellyfin.Plugin.IntroReplacer.Services;
 /// views) while remaining playable (kept out of the blocked-folders list and added
 /// to the enabled-folders allow-list when the user restricts folders).
 /// </para>
+/// <para>
+/// When the configured intro folder is already one of the administrator's own
+/// libraries (typically a Music Videos library created just for intros), no hidden
+/// library is created: the files are already scanned and playable, and the folder
+/// stays browsable as the administrator intended.
+/// </para>
 /// </summary>
 public sealed class IntroLibraryManager
 {
@@ -72,6 +78,44 @@ public sealed class IntroLibraryManager
             _logger.LogWarning(ex, "Intro Replacer: could not enumerate virtual folders");
             return false;
         }
+    }
+
+    /// <summary>
+    /// Gets a value indicating whether the intro folder is already the root of one of
+    /// the administrator's own libraries (for example a Music Videos library created to
+    /// hold intros). Those files are scanned and playable without the hidden library.
+    /// </summary>
+    /// <returns><c>true</c> when another library already covers the intro folder.</returns>
+    public bool IsIntroFolderALibrary()
+    {
+        try
+        {
+            return _libraryManager.GetVirtualFolders().Any(v =>
+                !string.Equals(v.Name, LibraryName, StringComparison.OrdinalIgnoreCase)
+                && v.Locations is not null
+                && v.Locations.Any(location => IntroAssetStore.PathsEqual(location, _assets.Directory)));
+        }
+        catch (Exception ex)
+        {
+            _logger.LogDebug(ex, "Intro Replacer: could not check whether the intro folder is a library");
+            return false;
+        }
+    }
+
+    /// <summary>
+    /// Creates the hidden library only when it is missing and actually needed. Cheap
+    /// enough to call per intro request: it does nothing when the intro folder is
+    /// already a library of its own.
+    /// </summary>
+    /// <returns>A task.</returns>
+    public async Task EnsureNeededAsync()
+    {
+        if (IsIntroFolderALibrary() || Exists())
+        {
+            return;
+        }
+
+        await EnsureAsync().ConfigureAwait(false);
     }
 
     /// <summary>
@@ -127,6 +171,14 @@ public sealed class IntroLibraryManager
                 return;
             }
 
+            if (IsIntroFolderALibrary())
+            {
+                _logger.LogInformation(
+                    "Intro Replacer: intro folder {Path} is already one of your libraries; using it directly instead of creating a hidden one",
+                    _assets.Directory);
+                return;
+            }
+
             await CreateLibraryAsync().ConfigureAwait(false);
             await HideFromUsersAsync().ConfigureAwait(false);
         }
@@ -157,6 +209,14 @@ public sealed class IntroLibraryManager
 
             if (!Directory.Exists(_assets.Directory))
             {
+                return;
+            }
+
+            if (IsIntroFolderALibrary())
+            {
+                _logger.LogInformation(
+                    "Intro Replacer: intro folder {Path} is already one of your libraries; using it directly instead of creating a hidden one",
+                    _assets.Directory);
                 return;
             }
 
@@ -213,26 +273,41 @@ public sealed class IntroLibraryManager
     }
 
     /// <summary>
-    /// Finds the hidden library item that matches an absolute file path.
+    /// Finds the library item that matches an absolute file path: first inside the
+    /// hidden intro library, then in any library (the intro folder may be one of the
+    /// administrator's own libraries, in which case the hidden one does not exist).
     /// </summary>
     /// <param name="fullPath">The absolute path of the intro file.</param>
     /// <returns>The library item, or <c>null</c> when not scanned yet.</returns>
     public BaseItem? FindItem(string fullPath)
     {
         var root = GetRootFolder();
-        if (root is null)
+        if (root is not null)
         {
-            return null;
+            try
+            {
+                var item = root.GetRecursiveChildren(c => c.Path is not null)
+                    .FirstOrDefault(c => IntroAssetStore.PathsEqual(c.Path, fullPath));
+                if (item is not null)
+                {
+                    return item;
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogDebug(ex, "Intro Replacer: error walking the hidden intro library");
+            }
         }
 
+        // Global path lookup covers the "intro folder is a normal library" case, and
+        // also a file that the hidden library has not scanned yet.
         try
         {
-            return root.GetRecursiveChildren(c => c.Path is not null)
-                .FirstOrDefault(c => IntroAssetStore.PathsEqual(c.Path, fullPath));
+            return _libraryManager.FindByPath(fullPath, isFolder: false);
         }
         catch (Exception ex)
         {
-            _logger.LogDebug(ex, "Intro Replacer: error walking the hidden intro library");
+            _logger.LogDebug(ex, "Intro Replacer: error looking up {Path} by path", fullPath);
             return null;
         }
     }

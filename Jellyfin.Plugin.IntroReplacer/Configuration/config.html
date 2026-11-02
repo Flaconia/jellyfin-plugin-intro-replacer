@@ -520,6 +520,30 @@
             const api = (path) => ApiClient.getUrl('IntroReplacer' + path);
             const token = () => ApiClient.accessToken ? ApiClient.accessToken() : '';
 
+            // Jellyfin 12.4 ignores X-Emby-Token unless the server re-enables
+            // "legacy authorization" (off by default, and a startup migration turns
+            // it off), so these direct fetches must send the Authorization header
+            // instead. Without it they get a 401 with an empty body.
+            const authHeaders = (json) => {
+                const headers = { 'Authorization': 'MediaBrowser Token="' + token() + '"' };
+                if (json) headers['Content-Type'] = 'application/json';
+                return headers;
+            };
+
+            // Server errors come back as a JSON string (BadRequest) or a problem
+            // object; show the human readable part instead of raw quotes/JSON.
+            const errorText = (text, fallback) => {
+                if (!text) return fallback;
+                try {
+                    const parsed = JSON.parse(text);
+                    if (typeof parsed === 'string') return parsed;
+                    if (parsed && (parsed.message || parsed.Message)) return parsed.message || parsed.Message;
+                } catch (_) {
+                    // Plain text body, use it as-is.
+                }
+                return text;
+            };
+
             const guid = () => ([1e7] + -1e3 + -4e3 + -8e3 + -1e11).replace(/[018]/g, c =>
                 (c ^ crypto.getRandomValues(new Uint8Array(1))[0] & 15 >> c / 4).toString(16));
 
@@ -754,12 +778,12 @@
                 Dashboard.showLoadingMsg();
                 fetch(api('/IntroFolder'), {
                     method: 'POST',
-                    headers: { 'Content-Type': 'application/json', 'X-Emby-Token': token() },
+                    headers: authHeaders(true),
                     body: JSON.stringify({ Path: input.value.trim() })
                 }).then(async (response) => {
                     if (!response.ok) {
                         const text = await response.text();
-                        throw new Error(text || t('folder.changeFailed'));
+                        throw new Error(errorText(text, t('folder.changeFailed')));
                     }
                     introFolder = await response.json();
                     config.IntroFolder = introFolder.Configured || '';
@@ -882,7 +906,7 @@
             const deleteAsset = (id) => {
                 fetch(api('/Assets/' + id), {
                     method: 'DELETE',
-                    headers: { 'X-Emby-Token': token() }
+                    headers: authHeaders()
                 }).then(reloadAssets);
             };
 
@@ -1022,7 +1046,7 @@
                     Dashboard.showLoadingMsg();
                     fetch(api('/Assets/FromLibrary/' + pickedVideoId), {
                         method: 'POST',
-                        headers: { 'X-Emby-Token': token() }
+                        headers: authHeaders()
                     }).then(() => {
                         closeVideoPicker();
                         Dashboard.showLoadingMsg();
@@ -1637,7 +1661,7 @@
                 Dashboard.showLoadingMsg();
                 fetch(api('/Assets'), {
                     method: 'POST',
-                    headers: { 'X-Emby-Token': token() },
+                    headers: authHeaders(),
                     body: fd
                 }).then(() => {
                     input.value = '';
