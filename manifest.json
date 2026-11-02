@@ -9,6 +9,14 @@
         "imageUrl": "",
         "versions": [
             {
+                "version": "2.1",
+                "changelog": "Fixes changing the intro folder and the asset buttons on Jellyfin 12.4.",
+                "targetAbi": "12.4.0.0",
+                "sourceUrl": "https://github.com/Flaconia/jellyfin-plugin-intro-replacer/releases/download/v2.1/Jellyfin.Plugin.IntroReplacer_2.1.zip",
+                "checksum": "4800699d7aa019457b0e6c6764e7dfd4",
+                "timestamp": "2026-11-02T19:58:52Z"
+            },
+            {
                 "version": "2.0",
                 "changelog": "Ported to Jellyfin 12.4 (.NET 10). This release targets Jellyfin 12.4 only;",
                 "targetAbi": "12.4.0.0",
