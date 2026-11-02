@@ -1,7 +1,7 @@
 ---
 name: "Intro Replacer"
 guid: "07e08043-224d-4228-964f-02242635344f"
-version: "2.0"
+version: "2.1"
 targetAbi: "12.4.0.0"
 framework: "net10.0"
 owner: "flaconia"
@@ -17,5 +17,9 @@ category: "MoviesAndShows"
 artifacts:
   - "Jellyfin.Plugin.IntroReplacer.dll"
 changelog: >
-  Ported to Jellyfin 12.4 (.NET 10). This release targets Jellyfin 12.4 only;
-  keep the server updated to use the plugin.
+  Fixes changing the intro folder and the asset buttons on Jellyfin 12.4.
+  The folder picker, upload, delete and "use a library video" actions now authenticate
+  the way 12.4 requires, so they no longer fail with a 401. A folder that is already
+  one of your libraries (for example a Music Videos library) is now used directly,
+  stays browsable, and no hidden duplicate library is created over it. This release
+  targets Jellyfin 12.4 only; keep the server updated to use the plugin.
